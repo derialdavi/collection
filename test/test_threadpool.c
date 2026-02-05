@@ -1,9 +1,12 @@
 #ifdef TEST
 
+#define _DEFAULT_SOURCE
+
 #include "unity.h"
 
 #include "threadpool.h"
 #include "queue.h"
+#include <unistd.h>
 
 void setUp(void)
 {
@@ -94,6 +97,7 @@ void test_threadpool_ShouldHandleMoreTasksCorrectly(void)
             pthread_mutex_lock(&counter_mutex);
             (*ctr)++;
             pthread_mutex_unlock(&counter_mutex);
+
         }
         return NULL;
     }
@@ -126,11 +130,12 @@ void test_threadpool_ShouldInterruptTasksOnDestroy(void)
     void *task(void *argp)
     {
         volatile int *ctr = (volatile int*)argp;
-        for (int i = 0; i < 100000; i++)
+        for (int i = 0; i < 10; i++)
         {
             pthread_mutex_lock(&counter_mutex);
             (*ctr)++;
             pthread_mutex_unlock(&counter_mutex);
+            usleep(100000); // Enusre that the task takes some time to execute, allowing us to interrupt it during threadpool destruction
         }
         return NULL;
     }
@@ -148,7 +153,7 @@ void test_threadpool_ShouldInterruptTasksOnDestroy(void)
 
     threadpool_destroy(tp, true);
     pthread_mutex_destroy(&counter_mutex);
-    TEST_ASSERT_LESS_THAN_INT_MESSAGE(100000 * num_tasks, counter, "Counter addition should have been interrupted during threadpool destruction");
+    TEST_ASSERT_LESS_THAN_INT_MESSAGE(10 * num_tasks, counter, "Counter addition should have been interrupted during threadpool destruction");
 }
 
 #endif // TEST
