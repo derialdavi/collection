@@ -178,6 +178,66 @@ void hashtable_destroy(hashtable *ht)
     free(ht);
 }
 
+size_t hash_string(void *key)
+{
+    const char *str = (const char *)key;
+    size_t hash = 5381;
+    int c;
+
+    while ((c = *str++))
+        hash = ((hash << 5) + hash) + c;
+
+    return hash;
+}
+
+size_t hash_int(void *key)
+{
+    return *(int *)key;
+}
+
+size_t hash_double(void *key)
+{
+    double d = *(double *)key;
+    size_t hash = 0;
+    unsigned char *p = (unsigned char *)&d;
+
+    for (size_t i = 0; i < sizeof(double); i++)
+        hash = hash * 31 + p[i];
+
+    return hash;
+}
+
+size_t compare_string(const void *key1, const void *key2)
+{
+    return strcmp((const char *)key1, (const char *)key2);
+}
+
+size_t compare_int(const void *key1, const void *key2)
+{
+    int int1 = *(const int *)key1;
+    int int2 = *(const int *)key2;
+
+    if (int1 < int2)
+        return -1;
+    else if (int1 > int2)
+        return 1;
+    else
+        return 0;
+}
+
+size_t compare_double(const void *key1, const void *key2)
+{
+    double double1 = *(const double *)key1;
+    double double2 = *(const double *)key2;
+
+    if (double1 < double2)
+        return -1;
+    else if (double1 > double2)
+        return 1;
+    else
+        return 0;
+}
+
 hashtable_pair *create_hashtable_pair(const void *key, const size_t key_size,
                                       const void *value, const size_t value_size)
 {

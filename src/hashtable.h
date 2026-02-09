@@ -98,4 +98,16 @@ bool hashtable_size(const hashtable *ht, size_t *size);
  */
 void hashtable_destroy(hashtable *ht);
 
+/* ========== DEFAULT HASH FUNCTIONS ========== */
+size_t hash_string(void *key);
+size_t hash_int(void *key);
+size_t hash_double(void *key);
+/* ============================================ */
+
+/* ========== DEFAULT KEY COMPARISON FUNCTIONS ========== */
+size_t compare_string(const void *key1, const void *key2);
+size_t compare_int(const void *key1, const void *key2);
+size_t compare_double(const void *key1, const void *key2);
+/* ====================================================== */
+
 #endif // HASHTABLE_H
