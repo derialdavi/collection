@@ -9,7 +9,7 @@ LIBDIR=$(shell gcc -print-file-name=libc.so | xargs dirname)
 LIBNAME=collection
 
 SRCS=$(wildcard $(SRCDIR)/*.c)
-HEADERS=$(wildcard $(SRCDIR)/*.h)
+HEADERS=$(notdir $(wildcard $(SRCDIR)/*.h))
 COLLECTION_SO=lib$(LIBNAME).so
 COLLECTION_DEBUG_SO=$(SODIR)/lib$(LIBNAME)_debug.so
 
@@ -24,7 +24,7 @@ install: $(COLLECTION_SO)
 	install -m 644 $(SRCDIR)/*.h /usr/include
 
 uninstall:
-	rm -f $(LIBDIR)/$(COLLECTION_SO) /usr/include/$(HEADERS)
+	rm -f $(LIBDIR)/$(COLLECTION_SO) $(addprefix /usr/include/,$(HEADERS))
 
 $(COLLECTION_SO): $(SRCS)
 	@mkdir -p $(SODIR)
