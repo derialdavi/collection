@@ -50,6 +50,9 @@ bool hashtable_put(hashtable *ht,
     {
         if (ht->compare_key_function(current->key, key) == 0)
         {
+            /* don't need new pair, just update */
+            free_hashtable_pair(new_pair);
+
             free(current->value);
             current->value = malloc(value_size);
             if (current->value == NULL)

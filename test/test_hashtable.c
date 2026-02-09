@@ -13,6 +13,7 @@
         if (ht != NULL) \
             TEST_ASSERT_EQUAL_INT(0, ((hashtable*)ht)->pair_number); \
     }
+
 /* =================== UTILITIES =================== */
 size_t simple_hash_function(void *key)
 {
