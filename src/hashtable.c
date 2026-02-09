@@ -7,7 +7,7 @@ hashtable_pair *create_hashtable_pair(const void *key, const size_t key_size,
                                       const void *value, const size_t value_size);
 
 void free_hashtable_pair(hashtable_pair *pair);
-bool resize_hashtable(hashtable *ht, const size_t new_size);
+static bool resize_hashtable(hashtable *ht, const size_t new_size);
 
 hashtable *hashtable_create(size_t (*hash_function)(void *key),
                             size_t (*compare_key_function)(const void *key1, const void *key2))
@@ -65,9 +65,7 @@ bool hashtable_put(hashtable *ht,
     ht->pair_number++;
 
     if (ht->pair_number > ht->buckets_size * 0.75)
-    {
-        // Resize logic would go here (not implemented)
-    }
+        return resize_hashtable(ht, ht->buckets_size * 2);
 
     return true;
 }
@@ -114,18 +112,16 @@ bool hashtable_remove(hashtable *ht, const void *key)
 
             free_hashtable_pair(current);
             ht->pair_number--;
-            return true;
+            break;
         }
         previous = current;
         current = current->next;
     }
 
-    if (ht->pair_number < ht->buckets_size * 0.25 && ht->buckets_size > INITIAL_BUCKETS_SIZE)
-    {
-        // Resize logic would go here (not implemented)
-    }
+    if (ht->pair_number < ht->buckets_size * 0.5 && ht->buckets_size > INITIAL_BUCKETS_SIZE)
+        return resize_hashtable(ht, ht->buckets_size / 2);
 
-    return false;
+    return true;
 }
 
 void **hashtable_keyset(const hashtable *ht)
@@ -218,10 +214,9 @@ void free_hashtable_pair(hashtable_pair *pair)
     free(pair);
 }
 
-bool resize_hashtable(hashtable *ht, const size_t new_size)
+static bool resize_hashtable(hashtable *ht, const size_t new_size)
 {
-    if (ht == NULL || new_size == 0)
-        return false;
+    // controls on parameters are done by the caller (hashtable_put and hashtable_remove)
 
     hashtable_pair **new_buckets = calloc(new_size, sizeof(hashtable_pair *));
     if (new_buckets == NULL)
