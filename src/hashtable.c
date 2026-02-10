@@ -2,6 +2,7 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 
 hashtable_pair *create_hashtable_pair(const void *key, const size_t key_size,
                                       const void *value, const size_t value_size);
@@ -217,12 +218,39 @@ size_t compare_int(const void *key1, const void *key2)
     int int1 = *(const int *)key1;
     int int2 = *(const int *)key2;
 
-    if (int1 < int2)
-        return -1;
-    else if (int1 > int2)
-        return 1;
-    else
-        return 0;
+    return (int1 < int2) ? -1 : (int1 > int2) ? 1 : 0;
+}
+
+size_t compare_uint8_t(const void *key1, const void *key2)
+{
+    uint8_t int1 = *(const uint8_t *)key1;
+    uint8_t int2 = *(const uint8_t *)key2;
+
+    return (int1 < int2) ? -1 : (int1 > int2) ? 1 : 0;
+}
+
+size_t compare_uint16_t(const void *key1, const void *key2)
+{
+    uint16_t int1 = *(const uint16_t *)key1;
+    uint16_t int2 = *(const uint16_t *)key2;
+
+    return (int1 < int2) ? -1 : (int1 > int2) ? 1 : 0;
+}
+
+size_t compare_uint32_t(const void *key1, const void *key2)
+{
+    uint32_t int1 = *(const uint32_t *)key1;
+    uint32_t int2 = *(const uint32_t *)key2;
+
+    return (int1 < int2) ? -1 : (int1 > int2) ? 1 : 0;
+}
+
+size_t compare_uint64_t(const void *key1, const void *key2)
+{
+    uint64_t int1 = *(const uint64_t *)key1;
+    uint64_t int2 = *(const uint64_t *)key2;
+
+    return (int1 < int2) ? -1 : (int1 > int2) ? 1 : 0;
 }
 
 size_t compare_double(const void *key1, const void *key2)
@@ -230,12 +258,7 @@ size_t compare_double(const void *key1, const void *key2)
     double double1 = *(const double *)key1;
     double double2 = *(const double *)key2;
 
-    if (double1 < double2)
-        return -1;
-    else if (double1 > double2)
-        return 1;
-    else
-        return 0;
+    return (double1 < double2) ? -1 : (double1 > double2) ? 1 : 0;
 }
 
 hashtable_pair *create_hashtable_pair(const void *key, const size_t key_size,
