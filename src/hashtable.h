@@ -107,6 +107,10 @@ size_t hash_double(void *key);
 /* ========== DEFAULT KEY COMPARISON FUNCTIONS ========== */
 size_t compare_string(const void *key1, const void *key2);
 size_t compare_int(const void *key1, const void *key2);
+size_t compare_uint8_t(const void *key1, const void *key2);
+size_t compare_uint16_t(const void *key1, const void *key2);
+size_t compare_uint32_t(const void *key1, const void *key2);
+size_t compare_uint64_t(const void *key1, const void *key2);
 size_t compare_double(const void *key1, const void *key2);
 /* ====================================================== */
 
