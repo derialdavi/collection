@@ -1,0 +1,22 @@
+# Build output. CMake uses build/, Ceedling nests under build/ceedling.
+build/
+
+# Editors and OS cruft
+.vscode/
+.idea/
+.cache/
+.DS_Store
+
+# Compilation databases and compiled artifacts, wherever they land
+compile_commands.json
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.dll
+*.exe
+*.out
+*.pdb

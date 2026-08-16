@@ -1,0 +1,78 @@
+# Removes every file recorded in install_manifest.txt, then prunes the
+# directories the install created that are now empty. CMake has no built-in
+# uninstall target, so this script backs the "uninstall" custom target.
+
+set(MANIFEST "@CMAKE_BINARY_DIR@/install_manifest.txt")
+
+if(NOT EXISTS "${MANIFEST}")
+  message(FATAL_ERROR
+    "Cannot find ${MANIFEST}.\n"
+    "Nothing has been installed from this build directory.")
+endif()
+
+file(STRINGS "${MANIFEST}" FILES)
+
+if(NOT FILES)
+  message(STATUS "${MANIFEST} is empty; nothing to remove.")
+  return()
+endif()
+
+# Deepest directory that contains everything this install wrote. Used as the
+# floor for pruning, and never itself removed. It is derived from the manifest
+# rather than from CMAKE_INSTALL_PREFIX because `cmake --install --prefix` can
+# override the prefix the build was configured with.
+set(FLOOR "")
+foreach(FILE IN LISTS FILES)
+  get_filename_component(DIR "$ENV{DESTDIR}${FILE}" DIRECTORY)
+  if(FLOOR STREQUAL "")
+    set(FLOOR "${DIR}")
+    continue()
+  endif()
+  file(RELATIVE_PATH REL "${FLOOR}" "${DIR}")
+  while(REL MATCHES "^\\.\\.")
+    get_filename_component(PARENT "${FLOOR}" DIRECTORY)
+    if(PARENT STREQUAL FLOOR)
+      break() # reached the filesystem root
+    endif()
+    set(FLOOR "${PARENT}")
+    file(RELATIVE_PATH REL "${FLOOR}" "${DIR}")
+  endwhile()
+endforeach()
+
+set(DIRS "")
+
+foreach(FILE IN LISTS FILES)
+  # DESTDIR-aware, matching how the install itself resolved the paths.
+  set(TARGET "$ENV{DESTDIR}${FILE}")
+  if(IS_SYMLINK "${TARGET}" OR EXISTS "${TARGET}")
+    message(STATUS "Removing ${TARGET}")
+    file(REMOVE "${TARGET}")
+    get_filename_component(DIR "${TARGET}" DIRECTORY)
+    list(APPEND DIRS "${DIR}")
+  else()
+    message(STATUS "Already gone: ${TARGET}")
+  endif()
+endforeach()
+
+list(REMOVE_DUPLICATES DIRS)
+
+# Prune each directory and then its ancestors, stopping at FLOOR or at the first
+# directory that still holds something another package may own.
+foreach(DIR IN LISTS DIRS)
+  set(CURRENT "${DIR}")
+  while(IS_DIRECTORY "${CURRENT}" AND NOT CURRENT STREQUAL FLOOR)
+    file(RELATIVE_PATH REL "${FLOOR}" "${CURRENT}")
+    if(REL MATCHES "^\\.\\.")
+      break()
+    endif()
+
+    file(GLOB REMAINING "${CURRENT}/*")
+    if(REMAINING)
+      break()
+    endif()
+
+    message(STATUS "Removing empty directory ${CURRENT}")
+    file(REMOVE_RECURSE "${CURRENT}")
+    get_filename_component(CURRENT "${CURRENT}" DIRECTORY)
+  endwhile()
+endforeach()

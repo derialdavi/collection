@@ -1,0 +1,39 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+# Threads is a PUBLIC dependency of the library targets, so consumers must be
+# able to resolve Threads::Threads before the exported targets are loaded.
+set(THREADS_PREFER_PTHREAD_FLAG ON)
+find_dependency(Threads)
+
+include("${CMAKE_CURRENT_LIST_DIR}/collectionTargets.cmake")
+
+# The install exports collection::collection_shared and/or
+# collection::collection_static. ALIAS targets are not exported, so the
+# canonical collection::collection name is rebuilt here as an INTERFACE target
+# forwarding to whichever library this install actually contains.
+#
+# Set collection_USE_STATIC before find_package() to prefer the static library,
+# or link collection::collection_static directly.
+if(NOT TARGET collection::collection)
+  if(collection_USE_STATIC AND TARGET collection::collection_static)
+    set(_collection_preferred collection::collection_static)
+  elseif(TARGET collection::collection_shared)
+    set(_collection_preferred collection::collection_shared)
+  elseif(TARGET collection::collection_static)
+    set(_collection_preferred collection::collection_static)
+  else()
+    set(collection_FOUND FALSE)
+    set(collection_NOT_FOUND_MESSAGE
+      "The collection package at ${CMAKE_CURRENT_LIST_DIR} exports no library target.")
+    return()
+  endif()
+
+  add_library(collection::collection INTERFACE IMPORTED)
+  set_target_properties(collection::collection PROPERTIES
+    INTERFACE_LINK_LIBRARIES "${_collection_preferred}")
+  unset(_collection_preferred)
+endif()
+
+check_required_components(collection)
