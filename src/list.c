@@ -1,0 +1,274 @@
+/*
+ * list - implementation.
+ *
+ * Everything that is not declared in list.h must be `static`: the library
+ * is built with hidden visibility and only COLLECTION_API declarations are
+ * exported.
+ */
+
+#include "list.h"
+
+#include <stddef.h>
+#include <stdlib.h>
+#include <string.h>
+
+struct node
+{
+    void        *data;
+    size_t       size;
+    struct node *next;
+};
+
+static struct node *node_create(const void *restrict data, size_t size)
+{
+    struct node *n = malloc(sizeof(struct node));
+    if (n == NULL) return NULL;
+
+    n->data = malloc(size);
+    if (n->data == NULL)
+    {
+        free(n);
+        return NULL;
+    }
+
+    memcpy(n->data, data, size);
+    n->size = size;
+    n->next = NULL;
+
+    return n;
+}
+
+static void node_destroy(struct node *n)
+{
+    if (n == NULL) return;
+    free(n->data);
+    free(n);
+}
+
+/* unlinks n from l and destroys it, prev being the node before n
+   (NULL when n is the first one) */
+static void list_unlink(list_t *l, struct node *prev, struct node *n)
+{
+    if (prev == NULL)
+        l->first = n->next;
+    else
+        prev->next = n->next;
+
+    if (n == l->last)
+        l->last = prev;
+
+    node_destroy(n);
+    l->size--;
+}
+
+int list_init(list_t *restrict l, size_t size, const void *restrict def_val,
+              size_t elem_size)
+{
+    if (l == NULL) return COLLECTION_ENULL;
+
+    l->first = NULL;
+    l->last = NULL;
+    l->size = 0;
+
+    if (size == 0) return COLLECTION_OK;
+
+    if (def_val == NULL) return COLLECTION_ENULL;
+    if (elem_size == 0) return COLLECTION_EINVAL;
+
+    for (size_t i = 0; i < size; i++)
+    {
+        int rc = list_append(l, def_val, elem_size);
+        if (rc != COLLECTION_OK)
+        {
+            /* leaves l empty and reusable rather than half filled */
+            list_destroy(l);
+            return rc;
+        }
+    }
+
+    return COLLECTION_OK;
+}
+
+int list_destroy(list_t *l)
+{
+    if (l == NULL) return COLLECTION_ENULL;
+
+    struct node *next = l->first;
+    while (next != NULL)
+    {
+        struct node *tmp = next->next;
+        node_destroy(next);
+        next = tmp;
+    }
+
+    l->first = NULL;
+    l->last = NULL;
+    l->size = 0;
+
+    return COLLECTION_OK;
+}
+
+int list_append(list_t *restrict l, const void *restrict value,
+                size_t elem_size)
+{
+    if (l == NULL || value == NULL) return COLLECTION_ENULL;
+    if (elem_size == 0) return COLLECTION_EINVAL;
+
+    struct node *new = node_create(value, elem_size);
+    if (new == NULL) return COLLECTION_ENOMEM;
+
+    if (l->first == NULL)
+        l->first = l->last = new;
+    else
+        l->last = l->last->next = new;
+
+    l->size++;
+    return COLLECTION_OK;
+}
+
+int list_add_at(list_t *restrict l, size_t index, const void *restrict value,
+                size_t elem_size)
+{
+    if (l == NULL || value == NULL) return COLLECTION_ENULL;
+    if (elem_size == 0) return COLLECTION_EINVAL;
+    if (index > l->size) return COLLECTION_ERANGE;
+
+    if (index == l->size)
+        return list_append(l, value, elem_size);
+
+    struct node *new = node_create(value, elem_size);
+    if (new == NULL) return COLLECTION_ENOMEM;
+
+    if (index == 0)
+    {
+        new->next = l->first;
+        l->first = new;
+    }
+    else
+    {
+        struct node *prev = l->first;
+        for (size_t i = 1; i < index; i++)
+            prev = prev->next;
+
+        new->next = prev->next;
+        prev->next = new;
+    }
+
+    l->size++;
+    return COLLECTION_OK;
+}
+
+int list_remove(list_t *restrict l, const void *restrict value)
+{
+    if (l == NULL || value == NULL) return COLLECTION_ENULL;
+
+    struct node *prev = NULL;
+    struct node *next = l->first;
+    while (next != NULL)
+    {
+        if (memcmp(next->data, value, next->size) == 0)
+        {
+            list_unlink(l, prev, next);
+            return COLLECTION_OK;
+        }
+
+        prev = next;
+        next = next->next;
+    }
+
+    return COLLECTION_ENOTFOUND;
+}
+
+int list_remove_all(list_t *restrict l, const void *restrict value)
+{
+    if (l == NULL || value == NULL) return COLLECTION_ENULL;
+
+    int rc = COLLECTION_ENOTFOUND;
+
+    struct node *prev = NULL;
+    struct node *next = l->first;
+    while (next != NULL)
+    {
+        struct node *tmp = next->next;
+
+        if (memcmp(next->data, value, next->size) == 0)
+        {
+            list_unlink(l, prev, next);
+            rc = COLLECTION_OK;
+        }
+        else
+            prev = next;
+
+        next = tmp;
+    }
+
+    return rc;
+}
+
+int list_remove_at(list_t *l, size_t index)
+{
+    if (l == NULL) return COLLECTION_ENULL;
+    if (index >= l->size) return COLLECTION_ERANGE;
+
+    struct node *prev = NULL;
+    struct node *next = l->first;
+    for (size_t i = 0; i < index; i++)
+    {
+        prev = next;
+        next = next->next;
+    }
+
+    list_unlink(l, prev, next);
+    return COLLECTION_OK;
+}
+
+int list_find(const list_t *restrict l, const void *restrict value,
+              size_t *restrict index)
+{
+    if (l == NULL || value == NULL || index == NULL) return COLLECTION_ENULL;
+
+    size_t i = 0;
+    struct node *next = l->first;
+    while (next != NULL)
+    {
+        if (memcmp(next->data, value, next->size) == 0)
+        {
+            *index = i;
+            return COLLECTION_OK;
+        }
+
+        next = next->next;
+        i++;
+    }
+
+    return COLLECTION_ENOTFOUND;
+}
+
+int list_at(const list_t *restrict l, size_t index, struct node **restrict node)
+{
+    if (l == NULL || node == NULL) return COLLECTION_ENULL;
+    if (index >= l->size) return COLLECTION_ERANGE;
+
+    struct node *next = l->first;
+    for (size_t i = 0; i < index; i++)
+        next = next->next;
+
+    *node = next;
+    return COLLECTION_OK;
+}
+
+int list_get_size(const list_t *restrict l, size_t *restrict size)
+{
+    if (l == NULL || size == NULL) return COLLECTION_ENULL;
+
+    *size = l->size;
+    return COLLECTION_OK;
+}
+
+int list_get_first(const list_t *restrict l, struct node **restrict first)
+{
+    if (l == NULL || first == NULL) return COLLECTION_ENULL;
+
+    *first = l->first;
+    return COLLECTION_OK;
+}

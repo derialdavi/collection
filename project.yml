@@ -297,6 +297,7 @@
     :src: []
     :inc:
       - "collection_api.h"
+      - "collection_error.h"
     :tst: []
   :boilerplates:
     :src: |
@@ -319,6 +320,14 @@
        *
        * Naming: functions are %1$s_<verb>, the main type is %1$s_t, and macros
        * are COLLECTION_<MODULE>_<NAME>.
+       *
+       * Errors: return int status codes from collection_error.h, COLLECTION_OK
+       * on success and a negative code on failure. Results go in out
+       * parameters. Define an E_<MODULE>_<NAME> code counting down from
+       * COLLECTION_EMODULE_BASE only when no shared code fits.
+       *
+       * Ownership: the caller owns the handle. Provide %1$s_init(%1$s_t *)
+       * and %1$s_destroy(%1$s_t *) rather than allocating and returning one.
        */
     :tst: |
       /*

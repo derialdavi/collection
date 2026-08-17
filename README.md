@@ -246,6 +246,8 @@ sanitizers and coverage run in CI.
 | Public functions | `<module>_<verb>` | `queue_enqueue`, `hashtable_put` |
 | Public types | `<module>_t`, auxiliary types `<module>_<thing>_t` | `queue_t`, `hashtable_pair_t` |
 | Macros and constants | `COLLECTION_<MODULE>_<NAME>` | `COLLECTION_HASHTABLE_INITIAL_BUCKETS` |
+| Shared status codes | `COLLECTION_E<NAME>`, defined once in `collection_error.h` | `COLLECTION_ENOMEM` |
+| Module status codes | `E_<MODULE>_<NAME>`, only when no shared code fits | `E_LIST_SOMETHING` |
 | Internal helpers | `static`, in the `.c` file, no naming rule | `static node_t *node_create(void)` |
 
 Prefer opaque types: define the struct in the `.c` file and expose only a typedef to an
@@ -253,6 +255,54 @@ incomplete type in the header, so the layout is not part of the ABI.
 
 Headers must be self-contained. Include what you use, including `<stdbool.h>`, `<stddef.h>`
 and `<stdint.h>`; do not rely on another header having pulled them in first.
+
+### Error handling and ownership
+
+Functions return an `int` status code, never a pointer and never a bare success flag.
+`COLLECTION_OK` is `0` and every failure is negative, so a caller can test `rc < 0` for "any
+error" and compare against a specific code when it needs to distinguish:
+
+```c
+list_t l;
+
+int rc = list_init(&l, 0, NULL, 0);
+if (rc < 0) return rc;
+
+int value = 7;
+if (list_append(&l, &value, sizeof value) == COLLECTION_ENOMEM) { /* ... */ }
+
+list_destroy(&l);
+```
+
+The shared codes live in [src/collection_error.h](src/collection_error.h) and cover the
+failures every container has in common:
+
+| Code | Meaning |
+| --- | --- |
+| `COLLECTION_OK` | The call succeeded |
+| `COLLECTION_ENULL` | A required pointer argument was NULL |
+| `COLLECTION_ENOMEM` | An allocation failed |
+| `COLLECTION_EINVAL` | An argument held an unusable value |
+| `COLLECTION_ERANGE` | An index was outside the valid range |
+| `COLLECTION_ENOTFOUND` | The requested value is not present |
+
+Reach for a shared code whenever one fits: code written against them keeps working across
+every module. Only when a module has a failure none of them can express does it define its
+own, counting down from `COLLECTION_EMODULE_BASE` in its own header. The shared set owns
+`-1` to `-99`, so the two ranges cannot collide.
+
+Containers do not allocate their own handle. The caller owns the struct, so it can live on
+the stack or inside another object, and the module provides an `init`/`destroy` pair rather
+than a `create`/`free` one:
+
+```c
+int  list_init(list_t *l, ...);   /* initializes storage the caller supplies */
+int  list_destroy(list_t *l);     /* releases the contents, not the handle */
+```
+
+`destroy` leaves the container valid and empty, so it can be reused without re-initializing,
+and calling it twice is safe. Anything a container stores is still byte-copied onto the heap
+and owned by the container.
 
 ### Exported symbols
 
