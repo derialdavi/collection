@@ -189,10 +189,12 @@ handle this for you.
 ```
 CMakeLists.txt        the build
 cmake/                templates: umbrella header, package config, pkg-config, uninstall
-src/                  one .c and one .h per module, plus collection_api.h
+src/                  one .c and one .h per module, plus collection_api.h and collection_error.h
 test/                 one test_<module>.c per module
 test/support/         Ceedling support files
+mixins/               opt-in Ceedling config overlays, applied with --mixin
 project.yml           Ceedling configuration
+.github/workflows/    CI
 build/                CMake output; Ceedling nests its own output in build/ceedling
 ```
 
@@ -232,8 +234,32 @@ ceedling test:all          # every module
 ceedling test:queue        # one module
 ```
 
-Tests are Ceedling's job, not CMake's; there is no `test` target in the build. Memory
-sanitizers and coverage run in CI.
+Tests are Ceedling's job, not CMake's; there is no `test` target in the build.
+
+To reproduce the memory checks that CI runs, apply the sanitizer mixin:
+
+```bash
+ceedling --mixin=mixins/sanitize.yml test:all
+```
+
+That rebuilds the suite under AddressSanitizer, LeakSanitizer and
+UndefinedBehaviorSanitizer. It is kept out of `project.yml` so ordinary runs stay fast.
+LeakSanitizer only exists on Linux, so a local run on macOS checks memory errors and
+undefined behaviour but not leaks.
+
+### Continuous integration
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs on every push and on every
+pull request targeting `main`:
+
+| Job | What it does |
+| --- | --- |
+| `tests` | `ceedling test:all` on Linux |
+| `memory` | the same suite under ASan, LSan and UBSan |
+| `build (ubuntu/macos/windows)` | configures, builds and installs with `COLLECTION_WERROR=ON` |
+
+`tests` and `memory` are required status checks: a pull request cannot be merged into
+`main` until both are green.
 
 ### Naming conventions
 
