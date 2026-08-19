@@ -114,24 +114,33 @@ COLLECTION_API int list_add_at(list_t *restrict l, size_t index,
  *
  * @param l pointer to the list to remove the element from
  * @param value pointer to the data to look for
+ * @param elem_size size of the data to look for. An element matches only when
+ * its own size equals this one, so a value of a different size never matches
+ * and is never read beyond
  * @return int COLLECTION_OK if an element was removed, COLLECTION_ENULL if l
- * or value is NULL, COLLECTION_ENOTFOUND if no element matched
+ * or value is NULL, COLLECTION_EINVAL if elem_size is 0, COLLECTION_ENOTFOUND
+ * if no element matched
  * @note l and value must not overlap
  */
-COLLECTION_API int list_remove(list_t *restrict l, const void *restrict value);
+COLLECTION_API int list_remove(list_t *restrict l, const void *restrict value,
+                               size_t elem_size);
 
 /**
  * @brief removes every element whose data matches the given value
  *
  * @param l pointer to the list to remove the elements from
  * @param value pointer to the data to look for
+ * @param elem_size size of the data to look for. An element matches only when
+ * its own size equals this one, so a value of a different size never matches
+ * and is never read beyond
  * @return int COLLECTION_OK if at least one element was removed,
- * COLLECTION_ENULL if l or value is NULL, COLLECTION_ENOTFOUND if no element
- * matched
+ * COLLECTION_ENULL if l or value is NULL, COLLECTION_EINVAL if elem_size is 0,
+ * COLLECTION_ENOTFOUND if no element matched
  * @note l and value must not overlap
  */
 COLLECTION_API int list_remove_all(list_t *restrict l,
-                                   const void *restrict value);
+                                   const void *restrict value,
+                                   size_t elem_size);
 
 /**
  * @brief removes the element at the given position
@@ -149,14 +158,18 @@ COLLECTION_API int list_remove_at(list_t *l, size_t index);
  *
  * @param l pointer to the list to search
  * @param value pointer to the data to look for
+ * @param elem_size size of the data to look for. An element matches only when
+ * its own size equals this one, so a value of a different size never matches
+ * and is never read beyond
  * @param index out parameter set to the zero based position of the first
  * matching element, untouched on failure
  * @return int COLLECTION_OK if an element matched, COLLECTION_ENULL if l,
- * value or index is NULL, COLLECTION_ENOTFOUND if no element matched
+ * value or index is NULL, COLLECTION_EINVAL if elem_size is 0,
+ * COLLECTION_ENOTFOUND if no element matched
  * @note l, value and index must not overlap
  */
 COLLECTION_API int list_find(const list_t *restrict l,
-                             const void *restrict value,
+                             const void *restrict value, size_t elem_size,
                              size_t *restrict index);
 
 /**

@@ -8,6 +8,7 @@
 
 #include "list.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,6 +44,14 @@ static void node_destroy(struct node *n)
     if (n == NULL) return;
     free(n->data);
     free(n);
+}
+
+/* an element matches only when its stored size equals elem_size, so a value of
+   a different size never matches and memcmp never reads beyond either object */
+static bool node_matches(const struct node *n, const void *value,
+                         size_t elem_size)
+{
+    return n->size == elem_size && memcmp(n->data, value, elem_size) == 0;
 }
 
 /* unlinks n from l and destroys it, prev being the node before n
@@ -158,15 +167,17 @@ int list_add_at(list_t *restrict l, size_t index, const void *restrict value,
     return COLLECTION_OK;
 }
 
-int list_remove(list_t *restrict l, const void *restrict value)
+int list_remove(list_t *restrict l, const void *restrict value,
+                size_t elem_size)
 {
     if (l == NULL || value == NULL) return COLLECTION_ENULL;
+    if (elem_size == 0) return COLLECTION_EINVAL;
 
     struct node *prev = NULL;
     struct node *next = l->first;
     while (next != NULL)
     {
-        if (memcmp(next->data, value, next->size) == 0)
+        if (node_matches(next, value, elem_size))
         {
             list_unlink(l, prev, next);
             return COLLECTION_OK;
@@ -179,9 +190,11 @@ int list_remove(list_t *restrict l, const void *restrict value)
     return COLLECTION_ENOTFOUND;
 }
 
-int list_remove_all(list_t *restrict l, const void *restrict value)
+int list_remove_all(list_t *restrict l, const void *restrict value,
+                    size_t elem_size)
 {
     if (l == NULL || value == NULL) return COLLECTION_ENULL;
+    if (elem_size == 0) return COLLECTION_EINVAL;
 
     int rc = COLLECTION_ENOTFOUND;
 
@@ -191,7 +204,7 @@ int list_remove_all(list_t *restrict l, const void *restrict value)
     {
         struct node *tmp = next->next;
 
-        if (memcmp(next->data, value, next->size) == 0)
+        if (node_matches(next, value, elem_size))
         {
             list_unlink(l, prev, next);
             rc = COLLECTION_OK;
@@ -223,15 +236,16 @@ int list_remove_at(list_t *l, size_t index)
 }
 
 int list_find(const list_t *restrict l, const void *restrict value,
-              size_t *restrict index)
+              size_t elem_size, size_t *restrict index)
 {
     if (l == NULL || value == NULL || index == NULL) return COLLECTION_ENULL;
+    if (elem_size == 0) return COLLECTION_EINVAL;
 
     size_t i = 0;
     struct node *next = l->first;
     while (next != NULL)
     {
-        if (memcmp(next->data, value, next->size) == 0)
+        if (node_matches(next, value, elem_size))
         {
             *index = i;
             return COLLECTION_OK;
