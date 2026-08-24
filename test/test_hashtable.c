@@ -102,7 +102,14 @@ static void assert_at_start(const hashtable_t *h)
    loses or double counts a pair fails here first */
 static void assert_bookkeeping(const hashtable_t *h)
 {
-    TEST_ASSERT_NOT_NULL(h->buckets);
+    if (h->buckets == NULL)
+    {
+        /* a table that owns no bucket array can hold nothing in it */
+        TEST_ASSERT_EQUAL_size_t(0, h->buckets_size);
+        TEST_ASSERT_EQUAL_size_t(0, h->size);
+        return;
+    }
+
     TEST_ASSERT_TRUE(h->buckets_size >= COLLECTION_HASHTABLE_INITIAL_BUCKETS);
     /* the index is taken by masking, which only works on a power of two */
     TEST_ASSERT_EQUAL_size_t(0, h->buckets_size & (h->buckets_size - 1));
@@ -138,6 +145,18 @@ static void assert_empty(const hashtable_t *h)
 
     for (size_t i = 0; i < h->buckets_size; i++)
         TEST_ASSERT_NULL(h->buckets[i]);
+
+    assert_at_start(h);
+    assert_bookkeeping(h);
+}
+
+/* asserts that h is the released table hashtable_destroy() promises: empty,
+   still set up, and owning nothing the caller would have to free */
+static void assert_released(const hashtable_t *h)
+{
+    TEST_ASSERT_EQUAL_size_t(0, h->size);
+    TEST_ASSERT_NULL(h->buckets);
+    TEST_ASSERT_EQUAL_size_t(0, h->buckets_size);
 
     assert_at_start(h);
     assert_bookkeeping(h);
@@ -319,9 +338,10 @@ void test_hashtable_should_EmptyTheTableOnDestroyAndLeaveItReusable(void)
     fill(&ht, pairs, 3);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
-    assert_empty(&ht);
+    assert_released(&ht);
 
-    /* usable again without a second hashtable_init */
+    /* usable again without a second hashtable_init, which means putting a
+       pair into a table that no longer owns a bucket array */
     const struct int_pair again = { 9, 90 };
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
@@ -329,10 +349,10 @@ void test_hashtable_should_EmptyTheTableOnDestroyAndLeaveItReusable(void)
                                         &again.value, sizeof(again.value)));
     assert_contents(&ht, &again, 1);
 
-    /* and destroying an already empty table is harmless */
+    /* and destroying an already destroyed table is harmless */
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
-    assert_empty(&ht);
+    assert_released(&ht);
 }
 
 void test_hashtable_should_KeepTheHashAndComparisonAcrossDestroy(void)
@@ -361,7 +381,7 @@ void test_hashtable_should_KeepTheHashAndComparisonAcrossDestroy(void)
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
-void test_hashtable_should_ShrinkTheBucketArrayBackToInitialOnDestroy(void)
+void test_hashtable_should_ReleaseTheBucketArrayOnDestroy(void)
 {
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
 
@@ -373,9 +393,23 @@ void test_hashtable_should_ShrinkTheBucketArrayBackToInitialOnDestroy(void)
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 
-    /* an emptied table costs what a fresh one costs, rather than holding on
-       to the array it grew */
-    assert_empty(&ht);
+    /* a destroyed table owns nothing: the array it grew is gone too, so a
+       caller that is done with it can drop the handle and leak nothing. The
+       array the table started with is not kept either, since there would be
+       no call left that could ever release it */
+    assert_released(&ht);
+
+    /* and it builds itself a new one when it is next used */
+    const struct int_pair again = { 1, 10 };
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
+                          hashtable_put(&ht, &again.key, sizeof(again.key),
+                                        &again.value, sizeof(again.value)));
+    TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS,
+                             ht.buckets_size);
+    assert_contents(&ht, &again, 1);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RewindTheIterationOnDestroy(void)
@@ -614,6 +648,8 @@ void test_hashtable_should_RejectNullPointersOnPut(void)
                           hashtable_put(&ht, NULL, 0, NULL, 0));
 
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectAZeroSizeOnPut(void)
@@ -629,6 +665,8 @@ void test_hashtable_should_RejectAZeroSizeOnPut(void)
                           hashtable_put(&ht, &key, sizeof(key), &value, 0));
 
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportEnomemWhenAPairCannotBeAllocated(void)
@@ -880,6 +918,8 @@ void test_hashtable_should_ReportNotfoundWhenGettingFromAnEmptyTable(void)
 
     TEST_ASSERT_EQUAL_INT(0x1234, out);
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectAValueSizeThatDoesNotMatchOnGet(void)
@@ -1079,6 +1119,8 @@ void test_hashtable_should_ReportNotContainsOnAnEmptyTable(void)
     TEST_ASSERT_FALSE(contains);
 
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectBadArgumentsOnContains(void)
@@ -1240,6 +1282,8 @@ void test_hashtable_should_ReportNotfoundWhenRemovingFromAnEmptyTable(void)
                           hashtable_remove(&ht, &key, sizeof(key)));
 
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectBadArgumentsOnRemove(void)
@@ -1324,6 +1368,8 @@ void test_hashtable_should_NeverShrinkBelowTheInitialBucketCount(void)
 
     /* emptied all the way down, and still holding the floor */
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RewindTheIterationOnRemove(void)
@@ -1459,6 +1505,8 @@ void test_hashtable_should_ReportNotfoundWhenWalkingAnEmptyTable(void)
     TEST_ASSERT_EQUAL_INT(0x1234, key);
     TEST_ASSERT_EQUAL_INT(0x5678, value);
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_StartOverAfterARewind(void)
@@ -1711,6 +1759,8 @@ void test_hashtable_should_ReportNotfoundWhenPeekingAnEmptyTable(void)
     TEST_ASSERT_EQUAL_size_t(0x1234, key_size);
     TEST_ASSERT_EQUAL_size_t(0x5678, value_size);
     assert_empty(&ht);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectNullPointersOnPeekPairSize(void)
@@ -2211,6 +2261,8 @@ void test_hashtable_should_SurviveFillingAndEmptyingRepeatedly(void)
 
         assert_empty(&ht);
     }
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_KeepEveryPairReachableWhileItResizes(void)
