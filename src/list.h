@@ -47,6 +47,19 @@ typedef struct list
 } list_t;
 
 /**
+ * @brief comparison deciding the order of two elements of a list
+ *
+ * Handed to list_sort() and called with the data pointers of the two elements
+ * being compared, in the same spirit as the callback qsort() takes. Return a
+ * negative value when a belongs before b, a positive value when it belongs
+ * after it, and 0 when the two are equivalent.
+ *
+ * @note the elements belong to the list: a comparison must not modify them,
+ * and must not touch the list itself
+ */
+typedef int (*list_cmp_t)(const void *a, const void *b);
+
+/**
  * @brief initializes a list, optionally prefilled with a default value
  *
  * @param l pointer to the list to initialize, allocated by the caller
@@ -151,6 +164,28 @@ COLLECTION_API int list_remove_all(list_t *restrict l,
  * COLLECTION_ERANGE if index is not smaller than the size of the list
  */
 COLLECTION_API int list_remove_at(list_t *l, size_t index);
+
+/**
+ * @brief sorts the list in place, ordering its elements with the given
+ * comparison
+ *
+ * @param l pointer to the list to sort
+ * @param cmp comparison deciding the order of two elements, called with the
+ * data pointers of the elements being compared
+ * @return int COLLECTION_OK on success, COLLECTION_ENULL if l or cmp is NULL
+ * @note the sort is stable: elements cmp calls equivalent keep the relative
+ * order they had before the call
+ * @note a list of fewer than two elements is already sorted, so it succeeds
+ * without cmp ever being called
+ * @note the nodes are relinked rather than reallocated, so an element keeps
+ * its address and only changes position. Any node held from an earlier
+ * list_at() or list_get_first() stays valid but no longer sits at the index it
+ * came from
+ * @note cmp is handed no size, so it has to know the layout of the elements on
+ * its own. A list holding elements of different sizes can only be sorted by a
+ * comparison that can tell them apart by itself
+ */
+COLLECTION_API int list_sort(list_t *l, list_cmp_t cmp);
 
 /**
  * @brief finds the position of the first element whose data matches the given

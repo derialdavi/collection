@@ -70,6 +70,48 @@ static void list_unlink(list_t *l, struct node *prev, struct node *n)
     l->size--;
 }
 
+/* cuts the chain starting at n after width nodes and returns the head of what
+   is left, NULL when the chain holds width nodes or fewer */
+static struct node *node_split(struct node *n, size_t width)
+{
+    if (n == NULL) return NULL;
+
+    for (size_t i = 1; i < width && n->next != NULL; i++)
+        n = n->next;
+
+    struct node *rest = n->next;
+    n->next = NULL;
+    return rest;
+}
+
+/* merges two chains that are already sorted into a single sorted one, taking
+   from a whenever cmp calls the two heads equivalent, which is what keeps
+   equal elements in the order they came in */
+static struct node *node_merge(struct node *a, struct node *b, list_cmp_t cmp)
+{
+    struct node  *head = NULL;
+    struct node **tail = &head;
+
+    while (a != NULL && b != NULL)
+    {
+        if (cmp(a->data, b->data) <= 0)
+        {
+            *tail = a;
+            a = a->next;
+        }
+        else
+        {
+            *tail = b;
+            b = b->next;
+        }
+
+        tail = &(*tail)->next;
+    }
+
+    *tail = (a != NULL) ? a : b;
+    return head;
+}
+
 int list_init(list_t *restrict l, size_t size, const void *restrict def_val,
               size_t elem_size)
 {
@@ -232,6 +274,50 @@ int list_remove_at(list_t *l, size_t index)
     }
 
     list_unlink(l, prev, next);
+    return COLLECTION_OK;
+}
+
+int list_sort(list_t *l, list_cmp_t cmp)
+{
+    if (l == NULL || cmp == NULL) return COLLECTION_ENULL;
+    if (l->size < 2) return COLLECTION_OK;
+
+    /* Bottom up merge sort: merge the adjacent runs of width nodes, then
+       double width until a single run covers the whole list.
+
+       qsort() cannot do this job. It wants the elements laid out contiguously,
+       so it would have to be handed an array of node pointers, which needs an
+       allocation that can fail and a comparison of its own wrapping the one
+       the caller gave. Merging the chain instead only relinks the nodes, so
+       sorting never allocates and cannot fail halfway through. */
+    for (size_t width = 1; width < l->size; width *= 2)
+    {
+        struct node  *rest = l->first;
+        struct node  *head = NULL;
+        struct node **tail = &head;
+
+        while (rest != NULL)
+        {
+            struct node *a = rest;
+            struct node *b = node_split(a, width);
+            rest = node_split(b, width);
+
+            *tail = node_merge(a, b, cmp);
+
+            /* walk to the end of what was just merged, so the next pair of
+               runs is appended after it */
+            while (*tail != NULL)
+                tail = &(*tail)->next;
+        }
+
+        l->first = head;
+    }
+
+    struct node *n = l->first;
+    while (n->next != NULL)
+        n = n->next;
+    l->last = n;
+
     return COLLECTION_OK;
 }
 

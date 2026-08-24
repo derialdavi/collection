@@ -937,6 +937,265 @@ void test_list_should_ReportRangeErrorWhenRemovingByIndexFromAnEmptyList(void)
     assert_empty(&list);
 }
 
+/* -- SORT --------------------------------------------------------------- */
+
+/* the ascending order of two ints, written the way a qsort() callback is:
+   subtracting would overflow on values far apart */
+static int cmp_int_asc(const void *a, const void *b)
+{
+    const int x = *(const int *)a;
+    const int y = *(const int *)b;
+
+    return (x > y) - (x < y);
+}
+
+/* the same order reversed, to prove the list follows the caller's comparison
+   rather than a built in one */
+static int cmp_int_desc(const void *a, const void *b)
+{
+    return cmp_int_asc(b, a);
+}
+
+static size_t cmp_calls;
+
+static int cmp_int_counting(const void *a, const void *b)
+{
+    cmp_calls++;
+    return cmp_int_asc(a, b);
+}
+
+/* an element carrying a tag the comparison below deliberately ignores, so
+   that equal keys can still be told apart afterwards */
+struct tagged
+{
+    int key;
+    int tag;
+};
+
+static int cmp_tagged_key(const void *a, const void *b)
+{
+    const int x = ((const struct tagged *)a)->key;
+    const int y = ((const struct tagged *)b)->key;
+
+    return (x > y) - (x < y);
+}
+
+void test_list_should_SortAnUnorderedListIntoAscendingOrder(void)
+{
+    const int values[]   = { 5, 3, 9, 1, 7, 2 };
+    const int expected[] = { 1, 2, 3, 5, 7, 9 };
+
+    fill(&list, values, 6);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_asc));
+
+    assert_contents(&list, expected, 6);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_FollowTheOrderTheComparisonAsksFor(void)
+{
+    const int values[]   = { 5, 3, 9, 1, 7, 2 };
+    const int expected[] = { 9, 7, 5, 3, 2, 1 };
+
+    fill(&list, values, 6);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_desc));
+
+    assert_contents(&list, expected, 6);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_LeaveAnAlreadySortedListInOrder(void)
+{
+    const int values[] = { 1, 2, 3, 4, 5 };
+
+    fill(&list, values, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_asc));
+
+    assert_contents(&list, values, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_SortAListThatIsInExactlyReverseOrder(void)
+{
+    const int values[]   = { 5, 4, 3, 2, 1 };
+    const int expected[] = { 1, 2, 3, 4, 5 };
+
+    fill(&list, values, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_asc));
+
+    assert_contents(&list, expected, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_KeepEveryDuplicateWhenSorting(void)
+{
+    const int values[]   = { 4, 1, 4, 1, 4 };
+    const int expected[] = { 1, 1, 4, 4, 4 };
+
+    fill(&list, values, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_asc));
+
+    /* nothing was dropped or duplicated on the way */
+    assert_contents(&list, expected, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_SortAnOddNumberOfElementsAcrossSeveralMergePasses(void)
+{
+    /* 21 elements: an odd count that is not a power of two, so every pass
+       ends with a run that has no partner to merge with */
+    const int values[] = { 12, 5, 19, 3, 17, 8, 1, 14, 6, 20, 2,
+                           11, 9, 18, 4, 16, 7, 15, 10, 13, 21 };
+    int       expected[21];
+
+    for (size_t i = 0; i < 21; i++)
+        expected[i] = (int)i + 1;
+
+    fill(&list, values, 21);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_asc));
+
+    assert_contents(&list, expected, 21);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_KeepEquivalentElementsInTheirOriginalOrder(void)
+{
+    /* same key, distinct tags: only a stable sort keeps the tags ascending
+       inside each group of equal keys */
+    const struct tagged values[] = {
+        { .key = 2, .tag = 0 }, { .key = 1, .tag = 1 }, { .key = 2, .tag = 2 },
+        { .key = 1, .tag = 3 }, { .key = 2, .tag = 4 }, { .key = 1, .tag = 5 },
+    };
+    const struct tagged expected[] = {
+        { .key = 1, .tag = 1 }, { .key = 1, .tag = 3 }, { .key = 1, .tag = 5 },
+        { .key = 2, .tag = 0 }, { .key = 2, .tag = 2 }, { .key = 2, .tag = 4 },
+    };
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_init(&list, 0, NULL, 0));
+
+    for (size_t i = 0; i < 6; i++)
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK, list_append(&list, &values[i], sizeof(values[i])));
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_tagged_key));
+
+    TEST_ASSERT_EQUAL_size_t(6, list.size);
+
+    size_t       seen = 0;
+    struct node *tail = NULL;
+
+    for (struct node *n = list.first; n != NULL; n = n->next)
+    {
+        TEST_ASSERT_TRUE(seen < 6);
+        TEST_ASSERT_EQUAL_size_t(sizeof(struct tagged), n->size);
+        TEST_ASSERT_EQUAL_MEMORY(&expected[seen], n->data,
+                                 sizeof(struct tagged));
+
+        tail = n;
+        seen++;
+    }
+
+    TEST_ASSERT_EQUAL_size_t(6, seen);
+    TEST_ASSERT_EQUAL_PTR(list.last, tail);
+    TEST_ASSERT_NULL(list.last->next);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_PullTheLastPointerToTheNewTail(void)
+{
+    const int values[]   = { 30, 10, 20 };
+    const int expected[] = { 10, 20, 30 };
+
+    fill(&list, values, 3);
+
+    /* the node that ends up last is the one that used to be the head */
+    struct node *head_before = list.first;
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_asc));
+
+    assert_contents(&list, expected, 3);
+    TEST_ASSERT_EQUAL_PTR(head_before, list.last);
+    TEST_ASSERT_NULL(list.last->next);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_RelinkTheSameNodesRatherThanReallocateThem(void)
+{
+    const int values[]   = { 3, 1, 2 };
+    const int expected[] = { 1, 2, 3 };
+
+    fill(&list, values, 3);
+
+    struct node *before[3];
+    size_t       i = 0;
+    for (struct node *n = list.first; n != NULL; n = n->next)
+        before[i++] = n;
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_asc));
+
+    assert_contents(&list, expected, 3);
+
+    /* the sorted chain holds exactly the nodes the list held before, so the
+       elements kept their addresses and only changed position */
+    TEST_ASSERT_EQUAL_PTR(before[1], list.first);
+    TEST_ASSERT_EQUAL_PTR(before[2], list.first->next);
+    TEST_ASSERT_EQUAL_PTR(before[0], list.first->next->next);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_SucceedWithoutComparingWhenThereIsNothingToOrder(void)
+{
+    const int value = 42;
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_init(&list, 0, NULL, 0));
+
+    cmp_calls = 0;
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_counting));
+    assert_empty(&list);
+    TEST_ASSERT_EQUAL_size_t(0, cmp_calls);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
+                          list_append(&list, &value, sizeof(value)));
+
+    cmp_calls = 0;
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_sort(&list, cmp_int_counting));
+    assert_contents(&list, &value, 1);
+    TEST_ASSERT_EQUAL_size_t(0, cmp_calls);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_RejectNullPointersOnSort(void)
+{
+    const int values[] = { 3, 1, 2 };
+
+    fill(&list, values, 3);
+    struct snapshot before = snapshot_of(&list);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, list_sort(NULL, cmp_int_asc));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, list_sort(&list, NULL));
+
+    /* the rejected sort left the list in the order it was already in */
+    assert_unchanged(&list, before, values, 3);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
 /* -- FIND --------------------------------------------------------------- */
 
 void test_list_should_FindTheIndexOfAMatchingElement(void)
