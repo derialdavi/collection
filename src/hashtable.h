@@ -133,6 +133,9 @@ COLLECTION_API int hashtable_init(hashtable_t *ht, hashtable_hash_t hash,
  * @note the hashtable_t belongs to the caller and is not freed. Afterwards ht
  * is a valid empty table, holding the hash and the comparison it was
  * initialized with, and can be reused without calling hashtable_init() again
+ * @note the bucket array goes back to COLLECTION_HASHTABLE_INITIAL_BUCKETS,
+ * so a table that grew large does not keep paying for it after being
+ * emptied. An emptied table costs exactly what a fresh one costs
  * @note the iteration is rewound, so the next hashtable_get_pair() starts
  * over
  */
