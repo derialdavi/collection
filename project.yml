@@ -138,7 +138,10 @@
 :flags:
   :test:
     :compile:
-      - -std=c23
+      # -std=c2x, not -std=c23: GCC only learned the c23 spelling in v14, and
+      # CMake emits c2x for C_STANDARD 23 anyway, so this matches what the
+      # library itself is compiled with.
+      - -std=c2x
       - -Wall
       - -Wextra
       - -Wpedantic
@@ -297,6 +300,7 @@
     :src: []
     :inc:
       - "collection_api.h"
+      - "collection_error.h"
     :tst: []
   :boilerplates:
     :src: |
@@ -319,6 +323,14 @@
        *
        * Naming: functions are %1$s_<verb>, the main type is %1$s_t, and macros
        * are COLLECTION_<MODULE>_<NAME>.
+       *
+       * Errors: return int status codes from collection_error.h, COLLECTION_OK
+       * on success and a negative code on failure. Results go in out
+       * parameters. Define an E_<MODULE>_<NAME> code counting down from
+       * COLLECTION_EMODULE_BASE only when no shared code fits.
+       *
+       * Ownership: the caller owns the handle. Provide %1$s_init(%1$s_t *)
+       * and %1$s_destroy(%1$s_t *) rather than allocating and returning one.
        */
     :tst: |
       /*

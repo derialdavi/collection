@@ -1,0 +1,31 @@
+# Ceedling mixin that rebuilds the test suite under AddressSanitizer,
+# LeakSanitizer and UndefinedBehaviorSanitizer.
+#
+#   ceedling --mixin=mixins/sanitize.yml test:all
+#
+# Kept out of project.yml so ordinary local runs stay fast; CI applies it as a
+# separate job. LeakSanitizer rides along with ASan on Linux, which is where the
+# leak gate actually runs. macOS ships no LeakSanitizer, so a local run checks
+# memory errors and undefined behaviour but not leaks.
+---
+:flags:
+  :test:
+    :compile:
+      - -fsanitize=address,undefined
+      - -fno-omit-frame-pointer
+      - -fno-sanitize-recover=all
+      - -O1
+    :link:
+      - -fsanitize=address,undefined
+
+:environment:
+  # test_list deliberately asks for an impossible allocation to prove
+  # COLLECTION_ENOMEM is reported. ASan aborts on oversized requests unless it
+  # is told to hand back NULL the way a real allocator would.
+  #
+  # detect_leaks is deliberately not set here: LeakSanitizer is on by default
+  # with ASan on Linux, and setting it explicitly makes ASan abort on macOS,
+  # where LeakSanitizer does not exist.
+  - :asan_options: allocator_may_return_null=1
+  - :ubsan_options: print_stacktrace=1
+...

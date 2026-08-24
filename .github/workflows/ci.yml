@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+# A newer push to the same branch makes an in-flight run obsolete.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CEEDLING_VERSION: "1.1.4"
+
+jobs:
+  # Gate 1: every unit test passes.
+  tests:
+    name: tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install Ceedling
+        run: gem install ceedling -v "$CEEDLING_VERSION"
+
+      - name: Run unit tests
+        run: ceedling test:all
+
+  # Gate 2: the same tests under AddressSanitizer, LeakSanitizer and
+  # UndefinedBehaviorSanitizer. LeakSanitizer is enabled by default alongside
+  # ASan on Linux, so a leaked allocation fails this job.
+  memory:
+    name: memory
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install Ceedling
+        run: gem install ceedling -v "$CEEDLING_VERSION"
+
+      - name: Run unit tests under ASan, LSan and UBSan
+        run: ceedling --mixin=mixins/sanitize.yml test:all
+
+  # The library has to keep building everywhere it claims to, with warnings
+  # promoted to errors. `cmake --install` lists every file it writes, so the
+  # log doubles as a check that the install tree is complete.
+  build:
+    name: build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Configure
+        run: cmake -B build -DCOLLECTION_WERROR=ON
+
+      - name: Build
+        run: cmake --build build --config Release
+
+      - name: Install to a staging prefix
+        run: cmake --install build --config Release --prefix staging

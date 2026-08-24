@@ -1,6 +1,9 @@
 # Build output. CMake uses build/, Ceedling nests under build/ceedling.
 build/
 
+# Staging prefix used by the install check in CI
+staging/
+
 # Editors and OS cruft
 .vscode/
 .idea/
