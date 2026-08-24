@@ -1,16 +1,20 @@
 /*
  * stack - public interface.
  *
- * Naming: functions are stack_<verb>, the main type is stack_t, and macros
- * are COLLECTION_<MODULE>_<NAME>.
+ * Naming: functions are stack_<verb> and macros are
+ * COLLECTION_<MODULE>_<NAME>. The main type is cstack_t rather than stack_t,
+ * the one place this module departs from the <module>_t convention: POSIX
+ * already defines stack_t in <signal.h> for sigaltstack, and on some platforms
+ * <stdlib.h> drags that in, so a stack_t here would clash in any translation
+ * unit that includes both.
  *
  * Errors: return int status codes from collection_error.h, COLLECTION_OK
  * on success and a negative code on failure. Results go in out
  * parameters. Define an E_<MODULE>_<NAME> code counting down from
  * COLLECTION_EMODULE_BASE only when no shared code fits.
  *
- * Ownership: the caller owns the handle. Provide stack_init(stack_t *)
- * and stack_destroy(stack_t *) rather than allocating and returning one.
+ * Ownership: the caller owns the handle. Provide stack_init(cstack_t *)
+ * and stack_destroy(cstack_t *) rather than allocating and returning one.
  */
 
 #ifndef COLLECTION_STACK_H
@@ -30,7 +34,7 @@ struct stack_node;
 /**
  * @brief a last in first out stack of byte-copied elements
  *
- * The caller owns the storage, so a stack_t can live on the stack, in static
+ * The caller owns the storage, so a cstack_t can live on the stack, in static
  * storage or inside another struct. Initialize it with stack_init() before any
  * other call and release its elements with stack_destroy().
  *
@@ -40,12 +44,14 @@ struct stack_node;
  *
  * @note the fields are internal. Read the number of elements with
  * stack_get_size() instead of touching them directly
+ * @note the type is cstack_t, not stack_t: that name belongs to POSIX
+ * <signal.h>. The struct tag and every function keep the plain stack name
  */
 typedef struct stack
 {
     struct stack_node *top;
     size_t             size;
-} stack_t;
+} cstack_t;
 
 /**
  * @brief initializes a stack, optionally prefilled with a default value
@@ -63,7 +69,7 @@ typedef struct stack
  * so it can be reused or passed to stack_destroy() without leaking
  * @note s and def_val must not overlap
  */
-COLLECTION_API int stack_init(stack_t *restrict s, size_t size,
+COLLECTION_API int stack_init(cstack_t *restrict s, size_t size,
                               const void *restrict def_val, size_t elem_size);
 
 /**
@@ -71,10 +77,10 @@ COLLECTION_API int stack_init(stack_t *restrict s, size_t size,
  *
  * @param s pointer to the stack to empty
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if s is NULL
- * @note the stack_t belongs to the caller and is not freed. Afterwards s is a
+ * @note the cstack_t belongs to the caller and is not freed. Afterwards s is a
  * valid empty stack and can be reused without calling stack_init() again
  */
-COLLECTION_API int stack_destroy(stack_t *s);
+COLLECTION_API int stack_destroy(cstack_t *s);
 
 /**
  * @brief puts a copy of a generic element on top of the stack
@@ -87,7 +93,7 @@ COLLECTION_API int stack_destroy(stack_t *s);
  * could not be allocated
  * @note s and value must not overlap
  */
-COLLECTION_API int stack_push(stack_t *restrict s, const void *restrict value,
+COLLECTION_API int stack_push(cstack_t *restrict s, const void *restrict value,
                               size_t elem_size);
 
 /**
@@ -105,7 +111,7 @@ COLLECTION_API int stack_push(stack_t *restrict s, const void *restrict value,
  * stack_peek_size() for the right size and try again
  * @note s and value must not overlap
  */
-COLLECTION_API int stack_pop(stack_t *restrict s, void *restrict value,
+COLLECTION_API int stack_pop(cstack_t *restrict s, void *restrict value,
                              size_t elem_size);
 
 /**
@@ -120,7 +126,7 @@ COLLECTION_API int stack_pop(stack_t *restrict s, void *restrict value,
  * top element, COLLECTION_ENOTFOUND if the stack is empty
  * @note s and value must not overlap
  */
-COLLECTION_API int stack_peek(const stack_t *restrict s, void *restrict value,
+COLLECTION_API int stack_peek(const cstack_t *restrict s, void *restrict value,
                               size_t elem_size);
 
 /**
@@ -136,7 +142,7 @@ COLLECTION_API int stack_peek(const stack_t *restrict s, void *restrict value,
  * stack_pop() and stack_peek() expect
  * @note s and elem_size must not overlap
  */
-COLLECTION_API int stack_peek_size(const stack_t *restrict s,
+COLLECTION_API int stack_peek_size(const cstack_t *restrict s,
                                    size_t *restrict elem_size);
 
 /**
@@ -148,7 +154,7 @@ COLLECTION_API int stack_peek_size(const stack_t *restrict s,
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if s or size is NULL
  * @note s and size must not overlap
  */
-COLLECTION_API int stack_get_size(const stack_t *restrict s,
+COLLECTION_API int stack_get_size(const cstack_t *restrict s,
                                   size_t *restrict size);
 
 /**
@@ -160,7 +166,7 @@ COLLECTION_API int stack_get_size(const stack_t *restrict s,
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if s or empty is NULL
  * @note s and empty must not overlap
  */
-COLLECTION_API int stack_is_empty(const stack_t *restrict s,
+COLLECTION_API int stack_is_empty(const cstack_t *restrict s,
                                   bool *restrict empty);
 
 #endif // COLLECTION_STACK_H

@@ -28,7 +28,7 @@ struct stack_node
     struct stack_node *next;
 };
 
-static stack_t stack;
+static cstack_t stack;
 
 void setUp(void)
 {
@@ -44,7 +44,7 @@ void tearDown(void)
 }
 
 /* asserts that s is the empty stack stack_init() and stack_destroy() promise */
-static void assert_empty(const stack_t *s)
+static void assert_empty(const cstack_t *s)
 {
     TEST_ASSERT_EQUAL_size_t(0, s->size);
     TEST_ASSERT_NULL(s->top);
@@ -58,7 +58,7 @@ static void assert_empty(const stack_t *s)
  * That way a test names its values once, in the order it pushed them, and
  * dropping the last one describes the stack after a pop.
  */
-static void assert_contents(const stack_t *s, const int *expected, size_t count)
+static void assert_contents(const cstack_t *s, const int *expected, size_t count)
 {
     TEST_ASSERT_EQUAL_size_t(count, s->size);
 
@@ -98,7 +98,7 @@ struct snapshot
     struct stack_node *top;
 };
 
-static struct snapshot snapshot_of(const stack_t *s)
+static struct snapshot snapshot_of(const cstack_t *s)
 {
     struct snapshot snap = { .size = s->size, .top = s->top };
     return snap;
@@ -106,7 +106,7 @@ static struct snapshot snapshot_of(const stack_t *s)
 
 /* asserts that s still holds exactly what it held when before was taken, down
    to the identity of the top node */
-static void assert_unchanged(const stack_t *s, struct snapshot before,
+static void assert_unchanged(const cstack_t *s, struct snapshot before,
                              const int *expected, size_t count)
 {
     TEST_ASSERT_EQUAL_size_t(before.size, s->size);
@@ -116,7 +116,7 @@ static void assert_unchanged(const stack_t *s, struct snapshot before,
 
 /* fixture: an initialized stack holding count ints, built with the API and
    pushed in array order, so values[count - 1] ends up on top */
-static void fill(stack_t *s, const int *values, size_t count)
+static void fill(cstack_t *s, const int *values, size_t count)
 {
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, stack_init(s, 0, NULL, 0));
 
