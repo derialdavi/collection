@@ -55,8 +55,10 @@
 # or may provide new command options. Refer to the readme in each plugin for 
 # details on how to use it.
 :plugins:
-  :load_paths: []
+  :load_paths:
+    - plugins                         # project-local plugins live here
   :enabled:
+    - collection_templates            # replaces Unity's stock header template, see plugins/collection_templates
     #- beep                           # beeps when finished, so you don't waste time waiting for ceedling
     - module_generator                # handy for quickly creating source, header, and test templates
     #- gcov                           # test coverage using gcov. Requires gcc, gcov, and a coverage analyzer like gcovr
@@ -292,9 +294,13 @@
 # `ceedling module:create[name]` generates src/name.c, src/name.h and
 # test/test_name.c together. The boilerplates below are prepended to each
 # generated file; %1$s expands to the module name. Ceedling hardcodes the
-# generated include guard as <MODULE>_H, and knows nothing of the coll_ prefix
-# every exported name carries, so the header boilerplate spells out both
-# renames this project expects.
+# generated include guard as <MODULE>_H, so the header boilerplate spells out
+# the rename this project expects.
+#
+# A boilerplate can only be *prepended*. Everything that follows the #include
+# block - the coll_<name> struct and its init/destroy declarations in the
+# header, their stub definitions in the source file - comes from
+# plugins/collection_templates instead.
 :module_generator:
   :naming: :snake #options: :bumpy, :camel, :caps, or :snake
   :includes:
