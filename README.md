@@ -269,12 +269,27 @@ pull request targeting `main`:
 | Test files | `test_<module>.c` | `test/test_hashtable.c` |
 | Test cases | `test_<module>_should_<Behaviour>` | `test_queue_should_ReturnNullWhenEmpty` |
 | Include guard | `COLLECTION_<MODULE>_H`, never with leading underscores, which are reserved | `COLLECTION_QUEUE_H` |
-| Public functions | `<module>_<verb>` | `queue_enqueue`, `hashtable_put` |
-| Public types | `<module>_t`, auxiliary types `<module>_<thing>_t` | `queue_t`, `hashtable_pair_t` |
+| Public functions | `coll_<module>_<verb>` | `coll_queue_enqueue`, `coll_hashtable_put` |
+| Public types | `coll_<module>`, auxiliary types `coll_<module>_<thing>`, never a `_t` suffix | `coll_queue`, `coll_hashtable_pair` |
+| Struct tags | The same name as the typedef | `struct coll_queue`, `struct coll_queue_node` |
 | Macros and constants | `COLLECTION_<MODULE>_<NAME>` | `COLLECTION_HASHTABLE_INITIAL_BUCKETS` |
 | Shared status codes | `COLLECTION_E<NAME>`, defined once in `collection_error.h` | `COLLECTION_ENOMEM` |
 | Module status codes | `E_<MODULE>_<NAME>`, only when no shared code fits | `E_LIST_SOMETHING` |
-| Internal helpers | `static`, in the `.c` file, no naming rule | `static node_t *node_create(void)` |
+| Internal helpers | `static`, in the `.c` file, no naming rule | `static struct coll_queue_node *node_create(void)` |
+
+Every name the library exports carries the `coll_` prefix. A shared library hands its
+symbols to every program that links it, and the plain names are ones a program is entitled
+to use itself: `list_init`, `queue_peek` and `hashtable_put` are what anyone writing their
+own container reaches for first. The prefix is what keeps a duplicate-symbol error, or a
+silently wrong definition, from ever being the caller's problem. Macros keep the longer
+`COLLECTION_` prefix instead: they are resolved before compilation and never reach the
+linker.
+
+Types stop at the prefixed name and take no `_t` suffix. POSIX reserves `_t` for the
+implementation, and every header the standard is free to add may claim a name in it, so the
+suffix buys nothing here and risks a collision the library cannot see coming. Since the
+typedef no longer needs a name distinct from its struct tag, the two are spelled the same:
+`struct coll_queue` and `coll_queue` name one type.
 
 Prefer opaque types: define the struct in the `.c` file and expose only a typedef to an
 incomplete type in the header, so the layout is not part of the ABI.
@@ -289,15 +304,15 @@ Functions return an `int` status code, never a pointer and never a bare success 
 error" and compare against a specific code when it needs to distinguish:
 
 ```c
-list_t l;
+coll_list l;
 
-int rc = list_init(&l, 0, NULL, 0);
+int rc = coll_list_init(&l, 0, NULL, 0);
 if (rc < 0) return rc;
 
 int value = 7;
-if (list_append(&l, &value, sizeof value) == COLLECTION_ENOMEM) { /* ... */ }
+if (coll_list_append(&l, &value, sizeof(value)) == COLLECTION_ENOMEM) { /* ... */ }
 
-list_destroy(&l);
+coll_list_destroy(&l);
 ```
 
 The shared codes live in [src/collection_error.h](src/collection_error.h) and cover the
@@ -322,8 +337,8 @@ the stack or inside another object, and the module provides an `init`/`destroy` 
 than a `create`/`free` one:
 
 ```c
-int  list_init(list_t *l, ...);   /* initializes storage the caller supplies */
-int  list_destroy(list_t *l);     /* releases the contents, not the handle */
+int  coll_list_init(coll_list *l, ...);  /* initializes storage the caller supplies */
+int  coll_list_destroy(coll_list *l);    /* releases the contents, not the handle */
 ```
 
 `destroy` leaves the container valid and empty, so it can be reused without re-initializing,
@@ -336,8 +351,8 @@ Every declaration that is part of the public API must be tagged `COLLECTION_API`
 defined in `src/collection_api.h` and already included in generated headers:
 
 ```c
-COLLECTION_API queue_t *queue_create(void);
-COLLECTION_API void     queue_destroy(queue_t *queue);
+COLLECTION_API coll_queue *coll_queue_create(void);
+COLLECTION_API void        coll_queue_destroy(coll_queue *queue);
 ```
 
 This is not decoration. The two platform families default in opposite directions: a Windows

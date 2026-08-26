@@ -13,16 +13,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct stack_node
+struct coll_stack_node
 {
-    void              *data;
-    size_t             size;
-    struct stack_node *next;
+    void                   *data;
+    size_t                  size;
+    struct coll_stack_node *next;
 };
 
-static struct stack_node *node_create(const void *restrict data, size_t size)
+static struct coll_stack_node *node_create(const void *restrict data,
+                                           size_t size)
 {
-    struct stack_node *n = malloc(sizeof(struct stack_node));
+    struct coll_stack_node *n = malloc(sizeof(struct coll_stack_node));
     if (n == NULL) return NULL;
 
     n->data = malloc(size);
@@ -39,7 +40,7 @@ static struct stack_node *node_create(const void *restrict data, size_t size)
     return n;
 }
 
-static void node_destroy(struct stack_node *n)
+static void node_destroy(struct coll_stack_node *n)
 {
     if (n == NULL) return;
     free(n->data);
@@ -48,9 +49,9 @@ static void node_destroy(struct stack_node *n)
 
 /* copies the top element of s into value, which must be exactly as large as
    the element was stored with, so nothing is truncated and memcpy never reads
-   beyond either object. Shared by stack_pop() and stack_peek() */
-static int stack_copy_top(const cstack_t *restrict s, void *restrict value,
-                          size_t elem_size)
+   beyond either object. Shared by coll_stack_pop() and coll_stack_peek() */
+static int coll_stack_copy_top(const coll_stack *restrict s,
+                               void *restrict value, size_t elem_size)
 {
     if (s == NULL || value == NULL) return COLLECTION_ENULL;
     if (elem_size == 0) return COLLECTION_EINVAL;
@@ -61,8 +62,8 @@ static int stack_copy_top(const cstack_t *restrict s, void *restrict value,
     return COLLECTION_OK;
 }
 
-int stack_init(cstack_t *restrict s, size_t size, const void *restrict def_val,
-               size_t elem_size)
+int coll_stack_init(coll_stack *restrict s, size_t size,
+                    const void *restrict def_val, size_t elem_size)
 {
     if (s == NULL) return COLLECTION_ENULL;
 
@@ -76,11 +77,11 @@ int stack_init(cstack_t *restrict s, size_t size, const void *restrict def_val,
 
     for (size_t i = 0; i < size; i++)
     {
-        int rc = stack_push(s, def_val, elem_size);
+        int rc = coll_stack_push(s, def_val, elem_size);
         if (rc != COLLECTION_OK)
         {
             /* leaves s empty and reusable rather than half filled */
-            stack_destroy(s);
+            coll_stack_destroy(s);
             return rc;
         }
     }
@@ -88,14 +89,14 @@ int stack_init(cstack_t *restrict s, size_t size, const void *restrict def_val,
     return COLLECTION_OK;
 }
 
-int stack_destroy(cstack_t *s)
+int coll_stack_destroy(coll_stack *s)
 {
     if (s == NULL) return COLLECTION_ENULL;
 
-    struct stack_node *next = s->top;
+    struct coll_stack_node *next = s->top;
     while (next != NULL)
     {
-        struct stack_node *tmp = next->next;
+        struct coll_stack_node *tmp = next->next;
         node_destroy(next);
         next = tmp;
     }
@@ -106,13 +107,13 @@ int stack_destroy(cstack_t *s)
     return COLLECTION_OK;
 }
 
-int stack_push(cstack_t *restrict s, const void *restrict value,
-               size_t elem_size)
+int coll_stack_push(coll_stack *restrict s, const void *restrict value,
+                    size_t elem_size)
 {
     if (s == NULL || value == NULL) return COLLECTION_ENULL;
     if (elem_size == 0) return COLLECTION_EINVAL;
 
-    struct stack_node *new = node_create(value, elem_size);
+    struct coll_stack_node *new = node_create(value, elem_size);
     if (new == NULL) return COLLECTION_ENOMEM;
 
     /* the element that was on top is now the one below it */
@@ -123,13 +124,14 @@ int stack_push(cstack_t *restrict s, const void *restrict value,
     return COLLECTION_OK;
 }
 
-int stack_pop(cstack_t *restrict s, void *restrict value, size_t elem_size)
+int coll_stack_pop(coll_stack *restrict s, void *restrict value,
+                   size_t elem_size)
 {
     /* the copy happens first, so a rejected call removes nothing */
-    int rc = stack_copy_top(s, value, elem_size);
+    int rc = coll_stack_copy_top(s, value, elem_size);
     if (rc != COLLECTION_OK) return rc;
 
-    struct stack_node *top = s->top;
+    struct coll_stack_node *top = s->top;
 
     s->top = top->next;
 
@@ -139,13 +141,14 @@ int stack_pop(cstack_t *restrict s, void *restrict value, size_t elem_size)
     return COLLECTION_OK;
 }
 
-int stack_peek(const cstack_t *restrict s, void *restrict value,
-               size_t elem_size)
+int coll_stack_peek(const coll_stack *restrict s, void *restrict value,
+                    size_t elem_size)
 {
-    return stack_copy_top(s, value, elem_size);
+    return coll_stack_copy_top(s, value, elem_size);
 }
 
-int stack_peek_size(const cstack_t *restrict s, size_t *restrict elem_size)
+int coll_stack_peek_size(const coll_stack *restrict s,
+                         size_t *restrict elem_size)
 {
     if (s == NULL || elem_size == NULL) return COLLECTION_ENULL;
     if (s->top == NULL) return COLLECTION_ENOTFOUND;
@@ -154,7 +157,7 @@ int stack_peek_size(const cstack_t *restrict s, size_t *restrict elem_size)
     return COLLECTION_OK;
 }
 
-int stack_get_size(const cstack_t *restrict s, size_t *restrict size)
+int coll_stack_get_size(const coll_stack *restrict s, size_t *restrict size)
 {
     if (s == NULL || size == NULL) return COLLECTION_ENULL;
 
@@ -162,7 +165,7 @@ int stack_get_size(const cstack_t *restrict s, size_t *restrict size)
     return COLLECTION_OK;
 }
 
-int stack_is_empty(const cstack_t *restrict s, bool *restrict empty)
+int coll_stack_is_empty(const coll_stack *restrict s, bool *restrict empty)
 {
     if (s == NULL || empty == NULL) return COLLECTION_ENULL;
 

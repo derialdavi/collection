@@ -292,8 +292,9 @@
 # `ceedling module:create[name]` generates src/name.c, src/name.h and
 # test/test_name.c together. The boilerplates below are prepended to each
 # generated file; %1$s expands to the module name. Ceedling hardcodes the
-# generated include guard as <MODULE>_H, so the header boilerplate spells out
-# the rename this project expects.
+# generated include guard as <MODULE>_H, and knows nothing of the coll_ prefix
+# every exported name carries, so the header boilerplate spells out both
+# renames this project expects.
 :module_generator:
   :naming: :snake #options: :bumpy, :camel, :caps, or :snake
   :includes:
@@ -318,19 +319,24 @@
        * Before you commit:
        *   1. prefix the include guard below with COLLECTION_, so that it reads
        *      COLLECTION_<MODULE>_H
-       *   2. tag every public declaration with COLLECTION_API
-       *   3. include what you use: <stdbool.h>, <stddef.h>, <stdint.h>, ...
+       *   2. prefix every exported name with coll_, struct tags included, and
+       *      leave the _t suffix off types: POSIX reserves it
+       *   3. tag every public declaration with COLLECTION_API
+       *   4. include what you use: <stdbool.h>, <stddef.h>, <stdint.h>, ...
        *
-       * Naming: functions are %1$s_<verb>, the main type is %1$s_t, and macros
-       * are COLLECTION_<MODULE>_<NAME>.
+       * Naming: every exported name carries the coll_ prefix, so functions are
+       * coll_%1$s_<verb> and the main type is coll_%1$s, with no _t suffix:
+       * POSIX reserves that one. Macros are COLLECTION_<MODULE>_<NAME>: they
+       * never reach the linker, so they keep the longer prefix.
        *
        * Errors: return int status codes from collection_error.h, COLLECTION_OK
        * on success and a negative code on failure. Results go in out
        * parameters. Define an E_<MODULE>_<NAME> code counting down from
        * COLLECTION_EMODULE_BASE only when no shared code fits.
        *
-       * Ownership: the caller owns the handle. Provide %1$s_init(%1$s_t *)
-       * and %1$s_destroy(%1$s_t *) rather than allocating and returning one.
+       * Ownership: the caller owns the handle. Provide
+       * coll_%1$s_init(coll_%1$s *) and coll_%1$s_destroy(coll_%1$s *)
+       * rather than allocating and returning one.
        */
     :tst: |
       /*

@@ -13,16 +13,17 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct node
+struct coll_list_node
 {
-    void        *data;
-    size_t       size;
-    struct node *next;
+    void                  *data;
+    size_t                 size;
+    struct coll_list_node *next;
 };
 
-static struct node *node_create(const void *restrict data, size_t size)
+static struct coll_list_node *node_create(const void *restrict data,
+                                          size_t size)
 {
-    struct node *n = malloc(sizeof(struct node));
+    struct coll_list_node *n = malloc(sizeof(struct coll_list_node));
     if (n == NULL) return NULL;
 
     n->data = malloc(size);
@@ -39,7 +40,7 @@ static struct node *node_create(const void *restrict data, size_t size)
     return n;
 }
 
-static void node_destroy(struct node *n)
+static void node_destroy(struct coll_list_node *n)
 {
     if (n == NULL) return;
     free(n->data);
@@ -48,7 +49,7 @@ static void node_destroy(struct node *n)
 
 /* an element matches only when its stored size equals elem_size, so a value of
    a different size never matches and memcmp never reads beyond either object */
-static bool node_matches(const struct node *n, const void *value,
+static bool node_matches(const struct coll_list_node *n, const void *value,
                          size_t elem_size)
 {
     return n->size == elem_size && memcmp(n->data, value, elem_size) == 0;
@@ -56,7 +57,8 @@ static bool node_matches(const struct node *n, const void *value,
 
 /* unlinks n from l and destroys it, prev being the node before n
    (NULL when n is the first one) */
-static void list_unlink(list_t *l, struct node *prev, struct node *n)
+static void coll_list_unlink(coll_list *l, struct coll_list_node *prev,
+                             struct coll_list_node *n)
 {
     if (prev == NULL)
         l->first = n->next;
@@ -72,14 +74,14 @@ static void list_unlink(list_t *l, struct node *prev, struct node *n)
 
 /* cuts the chain starting at n after width nodes and returns the head of what
    is left, NULL when the chain holds width nodes or fewer */
-static struct node *node_split(struct node *n, size_t width)
+static struct coll_list_node *node_split(struct coll_list_node *n, size_t width)
 {
     if (n == NULL) return NULL;
 
     for (size_t i = 1; i < width && n->next != NULL; i++)
         n = n->next;
 
-    struct node *rest = n->next;
+    struct coll_list_node *rest = n->next;
     n->next = NULL;
     return rest;
 }
@@ -87,10 +89,12 @@ static struct node *node_split(struct node *n, size_t width)
 /* merges two chains that are already sorted into a single sorted one, taking
    from a whenever cmp calls the two heads equivalent, which is what keeps
    equal elements in the order they came in */
-static struct node *node_merge(struct node *a, struct node *b, list_cmp_t cmp)
+static struct coll_list_node *node_merge(struct coll_list_node *a,
+                                         struct coll_list_node *b,
+                                         coll_list_cmp cmp)
 {
-    struct node  *head = NULL;
-    struct node **tail = &head;
+    struct coll_list_node *head = NULL;
+    struct coll_list_node **tail = &head;
 
     while (a != NULL && b != NULL)
     {
@@ -112,8 +116,8 @@ static struct node *node_merge(struct node *a, struct node *b, list_cmp_t cmp)
     return head;
 }
 
-int list_init(list_t *restrict l, size_t size, const void *restrict def_val,
-              size_t elem_size)
+int coll_list_init(coll_list *restrict l, size_t size,
+                   const void *restrict def_val, size_t elem_size)
 {
     if (l == NULL) return COLLECTION_ENULL;
 
@@ -128,11 +132,11 @@ int list_init(list_t *restrict l, size_t size, const void *restrict def_val,
 
     for (size_t i = 0; i < size; i++)
     {
-        int rc = list_append(l, def_val, elem_size);
+        int rc = coll_list_append(l, def_val, elem_size);
         if (rc != COLLECTION_OK)
         {
             /* leaves l empty and reusable rather than half filled */
-            list_destroy(l);
+            coll_list_destroy(l);
             return rc;
         }
     }
@@ -140,14 +144,14 @@ int list_init(list_t *restrict l, size_t size, const void *restrict def_val,
     return COLLECTION_OK;
 }
 
-int list_destroy(list_t *l)
+int coll_list_destroy(coll_list *l)
 {
     if (l == NULL) return COLLECTION_ENULL;
 
-    struct node *next = l->first;
+    struct coll_list_node *next = l->first;
     while (next != NULL)
     {
-        struct node *tmp = next->next;
+        struct coll_list_node *tmp = next->next;
         node_destroy(next);
         next = tmp;
     }
@@ -159,13 +163,13 @@ int list_destroy(list_t *l)
     return COLLECTION_OK;
 }
 
-int list_append(list_t *restrict l, const void *restrict value,
-                size_t elem_size)
+int coll_list_append(coll_list *restrict l, const void *restrict value,
+                     size_t elem_size)
 {
     if (l == NULL || value == NULL) return COLLECTION_ENULL;
     if (elem_size == 0) return COLLECTION_EINVAL;
 
-    struct node *new = node_create(value, elem_size);
+    struct coll_list_node *new = node_create(value, elem_size);
     if (new == NULL) return COLLECTION_ENOMEM;
 
     if (l->first == NULL)
@@ -177,17 +181,17 @@ int list_append(list_t *restrict l, const void *restrict value,
     return COLLECTION_OK;
 }
 
-int list_add_at(list_t *restrict l, size_t index, const void *restrict value,
-                size_t elem_size)
+int coll_list_add_at(coll_list *restrict l, size_t index,
+                     const void *restrict value, size_t elem_size)
 {
     if (l == NULL || value == NULL) return COLLECTION_ENULL;
     if (elem_size == 0) return COLLECTION_EINVAL;
     if (index > l->size) return COLLECTION_ERANGE;
 
     if (index == l->size)
-        return list_append(l, value, elem_size);
+        return coll_list_append(l, value, elem_size);
 
-    struct node *new = node_create(value, elem_size);
+    struct coll_list_node *new = node_create(value, elem_size);
     if (new == NULL) return COLLECTION_ENOMEM;
 
     if (index == 0)
@@ -197,7 +201,7 @@ int list_add_at(list_t *restrict l, size_t index, const void *restrict value,
     }
     else
     {
-        struct node *prev = l->first;
+        struct coll_list_node *prev = l->first;
         for (size_t i = 1; i < index; i++)
             prev = prev->next;
 
@@ -209,19 +213,19 @@ int list_add_at(list_t *restrict l, size_t index, const void *restrict value,
     return COLLECTION_OK;
 }
 
-int list_remove(list_t *restrict l, const void *restrict value,
-                size_t elem_size)
+int coll_list_remove(coll_list *restrict l, const void *restrict value,
+                     size_t elem_size)
 {
     if (l == NULL || value == NULL) return COLLECTION_ENULL;
     if (elem_size == 0) return COLLECTION_EINVAL;
 
-    struct node *prev = NULL;
-    struct node *next = l->first;
+    struct coll_list_node *prev = NULL;
+    struct coll_list_node *next = l->first;
     while (next != NULL)
     {
         if (node_matches(next, value, elem_size))
         {
-            list_unlink(l, prev, next);
+            coll_list_unlink(l, prev, next);
             return COLLECTION_OK;
         }
 
@@ -232,23 +236,23 @@ int list_remove(list_t *restrict l, const void *restrict value,
     return COLLECTION_ENOTFOUND;
 }
 
-int list_remove_all(list_t *restrict l, const void *restrict value,
-                    size_t elem_size)
+int coll_list_remove_all(coll_list *restrict l, const void *restrict value,
+                         size_t elem_size)
 {
     if (l == NULL || value == NULL) return COLLECTION_ENULL;
     if (elem_size == 0) return COLLECTION_EINVAL;
 
     int rc = COLLECTION_ENOTFOUND;
 
-    struct node *prev = NULL;
-    struct node *next = l->first;
+    struct coll_list_node *prev = NULL;
+    struct coll_list_node *next = l->first;
     while (next != NULL)
     {
-        struct node *tmp = next->next;
+        struct coll_list_node *tmp = next->next;
 
         if (node_matches(next, value, elem_size))
         {
-            list_unlink(l, prev, next);
+            coll_list_unlink(l, prev, next);
             rc = COLLECTION_OK;
         }
         else
@@ -260,24 +264,24 @@ int list_remove_all(list_t *restrict l, const void *restrict value,
     return rc;
 }
 
-int list_remove_at(list_t *l, size_t index)
+int coll_list_remove_at(coll_list *l, size_t index)
 {
     if (l == NULL) return COLLECTION_ENULL;
     if (index >= l->size) return COLLECTION_ERANGE;
 
-    struct node *prev = NULL;
-    struct node *next = l->first;
+    struct coll_list_node *prev = NULL;
+    struct coll_list_node *next = l->first;
     for (size_t i = 0; i < index; i++)
     {
         prev = next;
         next = next->next;
     }
 
-    list_unlink(l, prev, next);
+    coll_list_unlink(l, prev, next);
     return COLLECTION_OK;
 }
 
-int list_sort(list_t *l, list_cmp_t cmp)
+int coll_list_sort(coll_list *l, coll_list_cmp cmp)
 {
     if (l == NULL || cmp == NULL) return COLLECTION_ENULL;
     if (l->size < 2) return COLLECTION_OK;
@@ -292,14 +296,14 @@ int list_sort(list_t *l, list_cmp_t cmp)
        sorting never allocates and cannot fail halfway through. */
     for (size_t width = 1; width < l->size; width *= 2)
     {
-        struct node  *rest = l->first;
-        struct node  *head = NULL;
-        struct node **tail = &head;
+        struct coll_list_node *rest = l->first;
+        struct coll_list_node *head = NULL;
+        struct coll_list_node **tail = &head;
 
         while (rest != NULL)
         {
-            struct node *a = rest;
-            struct node *b = node_split(a, width);
+            struct coll_list_node *a = rest;
+            struct coll_list_node *b = node_split(a, width);
             rest = node_split(b, width);
 
             *tail = node_merge(a, b, cmp);
@@ -313,7 +317,7 @@ int list_sort(list_t *l, list_cmp_t cmp)
         l->first = head;
     }
 
-    struct node *n = l->first;
+    struct coll_list_node *n = l->first;
     while (n->next != NULL)
         n = n->next;
     l->last = n;
@@ -321,7 +325,7 @@ int list_sort(list_t *l, list_cmp_t cmp)
     return COLLECTION_OK;
 }
 
-int list_reverse(list_t *l)
+int coll_list_reverse(coll_list *l)
 {
     if (l == NULL) return COLLECTION_ENULL;
     if (l->size < 2) return COLLECTION_OK;
@@ -329,12 +333,12 @@ int list_reverse(list_t *l)
     /* walks the chain once, pointing every node at the one it came from.
        Relinking in place like this allocates nothing, so reversing cannot
        fail halfway and leave the list in pieces */
-    struct node *prev = NULL;
-    struct node *next = l->first;
+    struct coll_list_node *prev = NULL;
+    struct coll_list_node *next = l->first;
 
     while (next != NULL)
     {
-        struct node *tmp = next->next;
+        struct coll_list_node *tmp = next->next;
         next->next = prev;
         prev = next;
         next = tmp;
@@ -348,14 +352,14 @@ int list_reverse(list_t *l)
     return COLLECTION_OK;
 }
 
-int list_find(const list_t *restrict l, const void *restrict value,
-              size_t elem_size, size_t *restrict index)
+int coll_list_find(const coll_list *restrict l, const void *restrict value,
+                   size_t elem_size, size_t *restrict index)
 {
     if (l == NULL || value == NULL || index == NULL) return COLLECTION_ENULL;
     if (elem_size == 0) return COLLECTION_EINVAL;
 
     size_t i = 0;
-    struct node *next = l->first;
+    struct coll_list_node *next = l->first;
     while (next != NULL)
     {
         if (node_matches(next, value, elem_size))
@@ -371,12 +375,13 @@ int list_find(const list_t *restrict l, const void *restrict value,
     return COLLECTION_ENOTFOUND;
 }
 
-int list_at(const list_t *restrict l, size_t index, struct node **restrict node)
+int coll_list_at(const coll_list *restrict l, size_t index,
+                 struct coll_list_node **restrict node)
 {
     if (l == NULL || node == NULL) return COLLECTION_ENULL;
     if (index >= l->size) return COLLECTION_ERANGE;
 
-    struct node *next = l->first;
+    struct coll_list_node *next = l->first;
     for (size_t i = 0; i < index; i++)
         next = next->next;
 
@@ -384,7 +389,7 @@ int list_at(const list_t *restrict l, size_t index, struct node **restrict node)
     return COLLECTION_OK;
 }
 
-int list_get_size(const list_t *restrict l, size_t *restrict size)
+int coll_list_get_size(const coll_list *restrict l, size_t *restrict size)
 {
     if (l == NULL || size == NULL) return COLLECTION_ENULL;
 
@@ -392,7 +397,8 @@ int list_get_size(const list_t *restrict l, size_t *restrict size)
     return COLLECTION_OK;
 }
 
-int list_get_first(const list_t *restrict l, struct node **restrict first)
+int coll_list_get_first(const coll_list *restrict l,
+                        struct coll_list_node **restrict first)
 {
     if (l == NULL || first == NULL) return COLLECTION_ENULL;
 

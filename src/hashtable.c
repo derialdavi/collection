@@ -14,21 +14,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct hashtable_pair
+struct coll_hashtable_pair
 {
-    void                  *key;
-    size_t                 key_size;
-    void                  *value;
-    size_t                 value_size;
-    struct hashtable_pair *next;
+    void                       *key;
+    size_t                      key_size;
+    void                       *value;
+    size_t                      value_size;
+    struct coll_hashtable_pair *next;
 };
 
 /* -- PAIRS -------------------------------------------------------------- */
 
-static struct hashtable_pair *pair_create(const void *key, size_t key_size,
-                                          const void *value, size_t value_size)
+static struct coll_hashtable_pair *pair_create(const void *key, size_t key_size,
+                                               const void *value,
+                                               size_t value_size)
 {
-    struct hashtable_pair *p = malloc(sizeof(struct hashtable_pair));
+    struct coll_hashtable_pair *p = malloc(sizeof(struct coll_hashtable_pair));
     if (p == NULL) return NULL;
 
     p->key = malloc(key_size);
@@ -57,7 +58,7 @@ static struct hashtable_pair *pair_create(const void *key, size_t key_size,
     return p;
 }
 
-static void pair_destroy(struct hashtable_pair *p)
+static void pair_destroy(struct coll_hashtable_pair *p)
 {
     if (p == NULL) return;
     free(p->key);
@@ -69,7 +70,8 @@ static void pair_destroy(struct hashtable_pair *p)
 
 /* the bucket a key belongs in. The count is always a power of two, so the
    index is the low bits of the hash rather than a division */
-static size_t bucket_of(const hashtable_t *ht, const void *key, size_t key_size)
+static size_t bucket_of(const coll_hashtable *ht, const void *key,
+                        size_t key_size)
 {
     return ht->hash(key, key_size) & (ht->buckets_size - 1);
 }
@@ -79,14 +81,15 @@ static size_t bucket_of(const hashtable_t *ht, const void *key, size_t key_size)
  * bucket head when the pair is first in its chain, and the next field of the
  * pair before it otherwise. NULL when the key is not in the table.
  *
- * Handing back the link rather than the pair is what lets hashtable_remove()
- * unlink a pair without walking the chain a second time and without a special
- * case for the one at the front.
+ * Handing back the link rather than the pair is what lets
+ * coll_hashtable_remove() unlink a pair without walking the chain a second time
+ * and without a special case for the one at the front.
  */
-static struct hashtable_pair **pair_link(const hashtable_t *ht, size_t index,
-                                         const void *key, size_t key_size)
+static struct coll_hashtable_pair **pair_link(const coll_hashtable *ht,
+                                              size_t index, const void *key,
+                                              size_t key_size)
 {
-    struct hashtable_pair **link = &ht->buckets[index];
+    struct coll_hashtable_pair **link = &ht->buckets[index];
 
     while (*link != NULL)
     {
@@ -102,20 +105,20 @@ static struct hashtable_pair **pair_link(const hashtable_t *ht, size_t index,
 /* moves every pair into a bucket array of new_size, which must be a power of
    two. The pairs are relinked rather than reallocated, so a resize copies no
    keys and no values */
-static int buckets_resize(hashtable_t *ht, size_t new_size)
+static int buckets_resize(coll_hashtable *ht, size_t new_size)
 {
-    struct hashtable_pair **buckets = calloc(new_size, sizeof(*buckets));
+    struct coll_hashtable_pair **buckets = calloc(new_size, sizeof(*buckets));
     if (buckets == NULL) return COLLECTION_ENOMEM;
 
     for (size_t i = 0; i < ht->buckets_size; i++)
     {
-        struct hashtable_pair *p = ht->buckets[i];
+        struct coll_hashtable_pair *p = ht->buckets[i];
 
         while (p != NULL)
         {
-            struct hashtable_pair *next  = p->next;
-            size_t                 index = ht->hash(p->key, p->key_size) &
-                                           (new_size - 1);
+            struct coll_hashtable_pair *next  = p->next;
+            size_t                      index = ht->hash(p->key, p->key_size) &
+                                                (new_size - 1);
 
             p->next        = buckets[index];
             buckets[index] = p;
@@ -130,11 +133,11 @@ static int buckets_resize(hashtable_t *ht, size_t new_size)
     return COLLECTION_OK;
 }
 
-/* the bucket array a table needs before it can hold anything. hashtable_init()
-   normally leaves one behind; this is for the table whose init, or whose
-   destroy, could not allocate it, so a table that ran out of memory once is
-   still usable rather than broken for good */
-static int buckets_ensure(hashtable_t *ht)
+/* the bucket array a table needs before it can hold anything.
+   coll_hashtable_init() normally leaves one behind; this is for the table whose
+   init, or whose destroy, could not allocate it, so a table that ran out of
+   memory once is still usable rather than broken for good */
+static int buckets_ensure(coll_hashtable *ht)
 {
     if (ht->buckets != NULL) return COLLECTION_OK;
 
@@ -150,17 +153,17 @@ static int buckets_ensure(hashtable_t *ht)
 /* -- THE CURSOR --------------------------------------------------------- */
 
 /*
- * the pair hashtable_get_pair() would hand back next, with the bucket it sits
- * in written to bucket. NULL once the walk is over.
+ * the pair coll_hashtable_get_pair() would hand back next, with the bucket it
+ * sits in written to bucket. NULL once the walk is over.
  *
- * The cursor is a bucket and, when the walk is part way down a chain, the
- * pair inside it; a cursor with no pair means the next one is the head of the
- * first non-empty bucket from there on. Working it out on the way past like
- * this, rather than storing it, is what lets hashtable_peek_pair_size() read
- * the cursor without moving it.
+ * The cursor is a bucket and, when the walk is part way down a chain, the pair
+ * inside it; a cursor with no pair means the next one is the head of the first
+ * non-empty bucket from there on. Working it out on the way past like this,
+ * rather than storing it, is what lets coll_hashtable_peek_pair_size() read the
+ * cursor without moving it.
  */
-static struct hashtable_pair *cursor_next(const hashtable_t *ht,
-                                          size_t *bucket)
+static struct coll_hashtable_pair *cursor_next(const coll_hashtable *ht,
+                                               size_t *bucket)
 {
     if (ht->cursor_pair != NULL)
     {
@@ -181,8 +184,8 @@ static struct hashtable_pair *cursor_next(const hashtable_t *ht,
 
 /* leaves the cursor on whatever follows pair, which was in bucket: the rest
    of its chain first, then the buckets after it */
-static void cursor_advance(hashtable_t *ht, size_t bucket,
-                           const struct hashtable_pair *pair)
+static void cursor_advance(coll_hashtable *ht, size_t bucket,
+                           const struct coll_hashtable_pair *pair)
 {
     if (pair->next != NULL)
     {
@@ -197,17 +200,18 @@ static void cursor_advance(hashtable_t *ht, size_t bucket,
 
 /* -- THE TABLE ---------------------------------------------------------- */
 
-int hashtable_init(hashtable_t *ht, hashtable_hash_t hash, hashtable_cmp_t cmp)
+int coll_hashtable_init(coll_hashtable *ht, coll_hashtable_hash hash,
+                        coll_hashtable_cmp cmp)
 {
     if (ht == NULL) return COLLECTION_ENULL;
 
     ht->buckets      = NULL;
     ht->buckets_size = 0;
     ht->size         = 0;
-    ht->hash         = (hash != NULL) ? hash : hashtable_hash_bytes;
-    ht->cmp          = (cmp != NULL) ? cmp : hashtable_cmp_bytes;
+    ht->hash         = (hash != NULL) ? hash : coll_hashtable_hash_bytes;
+    ht->cmp          = (cmp != NULL) ? cmp : coll_hashtable_cmp_bytes;
 
-    hashtable_rewind(ht);
+    coll_hashtable_rewind(ht);
 
     /* on failure the table is left empty and without an array, which is a
        state every other call handles: the lookups find nothing in it and a
@@ -215,17 +219,17 @@ int hashtable_init(hashtable_t *ht, hashtable_hash_t hash, hashtable_cmp_t cmp)
     return buckets_ensure(ht);
 }
 
-int hashtable_destroy(hashtable_t *ht)
+int coll_hashtable_destroy(coll_hashtable *ht)
 {
     if (ht == NULL) return COLLECTION_ENULL;
 
     for (size_t i = 0; i < ht->buckets_size; i++)
     {
-        struct hashtable_pair *p = ht->buckets[i];
+        struct coll_hashtable_pair *p = ht->buckets[i];
 
         while (p != NULL)
         {
-            struct hashtable_pair *next = p->next;
+            struct coll_hashtable_pair *next = p->next;
 
             pair_destroy(p);
             p = next;
@@ -241,14 +245,14 @@ int hashtable_destroy(hashtable_t *ht)
     ht->buckets_size = 0;
     ht->size         = 0;
 
-    hashtable_rewind(ht);
+    coll_hashtable_rewind(ht);
 
     return COLLECTION_OK;
 }
 
-int hashtable_put(hashtable_t *restrict ht, const void *restrict key,
-                  size_t key_size, const void *restrict value,
-                  size_t value_size)
+int coll_hashtable_put(coll_hashtable *restrict ht, const void *restrict key,
+                       size_t key_size, const void *restrict value,
+                       size_t value_size)
 {
     if (ht == NULL || key == NULL || value == NULL) return COLLECTION_ENULL;
     if (key_size == 0 || value_size == 0) return COLLECTION_EINVAL;
@@ -260,11 +264,12 @@ int hashtable_put(hashtable_t *restrict ht, const void *restrict key,
        cannot allocate has changed nothing. It also means a size no allocator
        can serve is turned down before anything tries to read that many bytes
        of the caller's key */
-    struct hashtable_pair *new = pair_create(key, key_size, value, value_size);
+    struct coll_hashtable_pair *new =
+        pair_create(key, key_size, value, value_size);
     if (new == NULL) return COLLECTION_ENOMEM;
 
-    size_t                  index = bucket_of(ht, key, key_size);
-    struct hashtable_pair **link  = pair_link(ht, index, key, key_size);
+    size_t                       index = bucket_of(ht, key, key_size);
+    struct coll_hashtable_pair **link  = pair_link(ht, index, key, key_size);
 
     if (link != NULL)
     {
@@ -272,7 +277,7 @@ int hashtable_put(hashtable_t *restrict ht, const void *restrict key,
            takes over the value just allocated. The old value is released only
            now, with the new one already in hand: nothing past this point can
            fail and leave the pair without a value */
-        struct hashtable_pair *stored = *link;
+        struct coll_hashtable_pair *stored = *link;
 
         free(stored->value);
         stored->value      = new->value;
@@ -281,7 +286,7 @@ int hashtable_put(hashtable_t *restrict ht, const void *restrict key,
         new->value = NULL;
         pair_destroy(new);
 
-        hashtable_rewind(ht);
+        coll_hashtable_rewind(ht);
         return COLLECTION_OK;
     }
 
@@ -299,19 +304,20 @@ int hashtable_put(hashtable_t *restrict ht, const void *restrict key,
 
     /* a resize moves pairs between buckets, so a walk in progress can no
        longer be trusted to visit each of them once */
-    hashtable_rewind(ht);
+    coll_hashtable_rewind(ht);
 
     return COLLECTION_OK;
 }
 
-int hashtable_get(const hashtable_t *restrict ht, const void *restrict key,
-                  size_t key_size, void *restrict value, size_t value_size)
+int coll_hashtable_get(const coll_hashtable *restrict ht,
+                       const void *restrict key, size_t key_size,
+                       void *restrict value, size_t value_size)
 {
     if (ht == NULL || key == NULL || value == NULL) return COLLECTION_ENULL;
     if (key_size == 0 || value_size == 0) return COLLECTION_EINVAL;
     if (ht->size == 0) return COLLECTION_ENOTFOUND;
 
-    struct hashtable_pair **link =
+    struct coll_hashtable_pair **link =
         pair_link(ht, bucket_of(ht, key, key_size), key, key_size);
     if (link == NULL) return COLLECTION_ENOTFOUND;
 
@@ -324,16 +330,16 @@ int hashtable_get(const hashtable_t *restrict ht, const void *restrict key,
     return COLLECTION_OK;
 }
 
-int hashtable_get_value_size(const hashtable_t *restrict ht,
-                             const void *restrict key, size_t key_size,
-                             size_t *restrict value_size)
+int coll_hashtable_get_value_size(const coll_hashtable *restrict ht,
+                                  const void *restrict key, size_t key_size,
+                                  size_t *restrict value_size)
 {
     if (ht == NULL || key == NULL || value_size == NULL)
         return COLLECTION_ENULL;
     if (key_size == 0) return COLLECTION_EINVAL;
     if (ht->size == 0) return COLLECTION_ENOTFOUND;
 
-    struct hashtable_pair **link =
+    struct coll_hashtable_pair **link =
         pair_link(ht, bucket_of(ht, key, key_size), key, key_size);
     if (link == NULL) return COLLECTION_ENOTFOUND;
 
@@ -342,9 +348,9 @@ int hashtable_get_value_size(const hashtable_t *restrict ht,
     return COLLECTION_OK;
 }
 
-int hashtable_contains(const hashtable_t *restrict ht,
-                       const void *restrict key, size_t key_size,
-                       bool *restrict contains)
+int coll_hashtable_contains(const coll_hashtable *restrict ht,
+                            const void *restrict key, size_t key_size,
+                            bool *restrict contains)
 {
     if (ht == NULL || key == NULL || contains == NULL) return COLLECTION_ENULL;
     if (key_size == 0) return COLLECTION_EINVAL;
@@ -361,18 +367,18 @@ int hashtable_contains(const hashtable_t *restrict ht,
     return COLLECTION_OK;
 }
 
-int hashtable_remove(hashtable_t *restrict ht, const void *restrict key,
-                     size_t key_size)
+int coll_hashtable_remove(coll_hashtable *restrict ht,
+                          const void *restrict key, size_t key_size)
 {
     if (ht == NULL || key == NULL) return COLLECTION_ENULL;
     if (key_size == 0) return COLLECTION_EINVAL;
     if (ht->size == 0) return COLLECTION_ENOTFOUND;
 
-    struct hashtable_pair **link =
+    struct coll_hashtable_pair **link =
         pair_link(ht, bucket_of(ht, key, key_size), key, key_size);
     if (link == NULL) return COLLECTION_ENOTFOUND;
 
-    struct hashtable_pair *stored = *link;
+    struct coll_hashtable_pair *stored = *link;
 
     /* whatever pointed at the pair now points past it, whether that was the
        bucket head or the pair before it */
@@ -391,20 +397,20 @@ int hashtable_remove(hashtable_t *restrict ht, const void *restrict key,
 
     /* the cursor may have been sitting on the pair that was just freed, and
        a resize moves the rest of them around */
-    hashtable_rewind(ht);
+    coll_hashtable_rewind(ht);
 
     return COLLECTION_OK;
 }
 
-int hashtable_get_pair(hashtable_t *restrict ht, void *restrict key,
-                       size_t key_size, void *restrict value,
-                       size_t value_size)
+int coll_hashtable_get_pair(coll_hashtable *restrict ht, void *restrict key,
+                            size_t key_size, void *restrict value,
+                            size_t value_size)
 {
     if (ht == NULL || key == NULL || value == NULL) return COLLECTION_ENULL;
     if (key_size == 0 || value_size == 0) return COLLECTION_EINVAL;
 
-    size_t                 bucket = 0;
-    struct hashtable_pair *pair   = cursor_next(ht, &bucket);
+    size_t                      bucket = 0;
+    struct coll_hashtable_pair *pair   = cursor_next(ht, &bucket);
 
     if (pair == NULL) return COLLECTION_ENOTFOUND;
 
@@ -421,15 +427,15 @@ int hashtable_get_pair(hashtable_t *restrict ht, void *restrict key,
     return COLLECTION_OK;
 }
 
-int hashtable_peek_pair_size(const hashtable_t *restrict ht,
-                             size_t *restrict key_size,
-                             size_t *restrict value_size)
+int coll_hashtable_peek_pair_size(const coll_hashtable *restrict ht,
+                                  size_t *restrict key_size,
+                                  size_t *restrict value_size)
 {
     if (ht == NULL || key_size == NULL || value_size == NULL)
         return COLLECTION_ENULL;
 
-    size_t                 bucket = 0;
-    struct hashtable_pair *pair   = cursor_next(ht, &bucket);
+    size_t                      bucket = 0;
+    struct coll_hashtable_pair *pair   = cursor_next(ht, &bucket);
 
     if (pair == NULL) return COLLECTION_ENOTFOUND;
 
@@ -439,7 +445,7 @@ int hashtable_peek_pair_size(const hashtable_t *restrict ht,
     return COLLECTION_OK;
 }
 
-int hashtable_rewind(hashtable_t *ht)
+int coll_hashtable_rewind(coll_hashtable *ht)
 {
     if (ht == NULL) return COLLECTION_ENULL;
 
@@ -449,7 +455,8 @@ int hashtable_rewind(hashtable_t *ht)
     return COLLECTION_OK;
 }
 
-int hashtable_get_size(const hashtable_t *restrict ht, size_t *restrict size)
+int coll_hashtable_get_size(const coll_hashtable *restrict ht,
+                            size_t *restrict size)
 {
     if (ht == NULL || size == NULL) return COLLECTION_ENULL;
 
@@ -458,7 +465,8 @@ int hashtable_get_size(const hashtable_t *restrict ht, size_t *restrict size)
     return COLLECTION_OK;
 }
 
-int hashtable_is_empty(const hashtable_t *restrict ht, bool *restrict empty)
+int coll_hashtable_is_empty(const coll_hashtable *restrict ht,
+                            bool *restrict empty)
 {
     if (ht == NULL || empty == NULL) return COLLECTION_ENULL;
 
@@ -512,7 +520,7 @@ static uint64_t mix(uint64_t hash)
     return hash;
 }
 
-size_t hashtable_hash_bytes(const void *key, size_t key_size)
+size_t coll_hashtable_hash_bytes(const void *key, size_t key_size)
 {
     if (key == NULL || key_size == 0) return 0;
 
@@ -521,7 +529,7 @@ size_t hashtable_hash_bytes(const void *key, size_t key_size)
     return (size_t)mix(fnv1a(key, key_size));
 }
 
-size_t hashtable_hash_string(const void *key, size_t key_size)
+size_t coll_hashtable_hash_string(const void *key, size_t key_size)
 {
     if (key == NULL || key_size == 0) return 0;
 
@@ -539,8 +547,8 @@ size_t hashtable_hash_string(const void *key, size_t key_size)
 
 /* -- DEFAULT KEY COMPARISON FUNCTIONS ----------------------------------- */
 
-int hashtable_cmp_bytes(const void *key1, size_t key1_size, const void *key2,
-                        size_t key2_size)
+int coll_hashtable_cmp_bytes(const void *key1, size_t key1_size,
+                             const void *key2, size_t key2_size)
 {
     /* keys of different lengths are different keys, whatever their bytes say,
        which is what keeps a short key from matching the start of a long one */
@@ -550,8 +558,8 @@ int hashtable_cmp_bytes(const void *key1, size_t key1_size, const void *key2,
     return memcmp(key1, key2, key1_size);
 }
 
-int hashtable_cmp_string(const void *key1, size_t key1_size, const void *key2,
-                         size_t key2_size)
+int coll_hashtable_cmp_string(const void *key1, size_t key1_size,
+                              const void *key2, size_t key2_size)
 {
     if (key1 == NULL || key2 == NULL) return key1 != key2;
 
