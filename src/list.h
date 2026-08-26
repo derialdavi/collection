@@ -188,6 +188,24 @@ COLLECTION_API int list_remove_at(list_t *l, size_t index);
 COLLECTION_API int list_sort(list_t *l, list_cmp_t cmp);
 
 /**
+ * @brief reverses the list in place, so the element that was last comes first
+ *
+ * @param l pointer to the list to reverse
+ * @return int COLLECTION_OK on success, COLLECTION_ENULL if l is NULL
+ * @note a list of fewer than two elements is already its own reverse, so it
+ * succeeds without anything being touched
+ * @note the nodes are relinked rather than reallocated, so an element keeps
+ * its address and only changes position. Any node held from an earlier
+ * list_at() or list_get_first() stays valid but no longer sits at the index it
+ * came from
+ * @note reversing allocates nothing, so it cannot fail partway and leave the
+ * list half turned around
+ * @note this is not the same as sorting with the opposite comparison: it
+ * turns around the order the list is actually in, whatever that order is
+ */
+COLLECTION_API int list_reverse(list_t *l);
+
+/**
  * @brief finds the position of the first element whose data matches the given
  * value
  *
