@@ -37,14 +37,42 @@ find_package(Threads REQUIRED)
 # Sources
 #
 # Globbed on purpose: modules are created with `ceedling module:create[name]`,
-# which drops a .c/.h pair into src/. CONFIGURE_DEPENDS makes the build pick
-# them up without anyone having to edit this file.
+# which drops a .c/.h pair into src/, or `ceedling module:create[folder/name]`,
+# which drops it into src/folder/. CONFIGURE_DEPENDS makes the build pick them
+# up without anyone having to edit this file.
 # ----------------------------------------------------------------------------
 
-file(GLOB COLLECTION_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
-file(GLOB COLLECTION_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
+file(GLOB_RECURSE COLLECTION_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
+file(GLOB_RECURSE COLLECTION_HEADERS CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 list(SORT COLLECTION_SOURCES)
 list(SORT COLLECTION_HEADERS)
+
+# Every directory under src/ goes on the private include path, so a module can
+# say #include "list.h" regardless of which subfolder either file lives in.
+# This mirrors the `src/**` include path Ceedling already uses, which is why
+# the same sources compile under both build systems without qualified includes.
+set(COLLECTION_SOURCE_INCLUDE_DIRS "")
+foreach(header IN LISTS COLLECTION_HEADERS)
+  get_filename_component(header_dir "${header}" DIRECTORY)
+  list(APPEND COLLECTION_SOURCE_INCLUDE_DIRS "${header_dir}")
+endforeach()
+list(REMOVE_DUPLICATES COLLECTION_SOURCE_INCLUDE_DIRS)
+
+# Headers are flattened into include/collection/ in both the build and install
+# trees, and Ceedling matches tests to sources by basename. Two headers sharing
+# a basename in different subfolders would silently clobber each other, so fail
+# loudly instead.
+set(COLLECTION_HEADER_NAMES "")
+foreach(header IN LISTS COLLECTION_HEADERS)
+  get_filename_component(header_name "${header}" NAME)
+  if(header_name IN_LIST COLLECTION_HEADER_NAMES)
+    message(FATAL_ERROR
+      "Duplicate header basename '${header_name}' under src/.\n"
+      "Public headers are installed flat as <collection/${header_name}>, so "
+      "basenames must be unique across subfolders. Rename one of them.")
+  endif()
+  list(APPEND COLLECTION_HEADER_NAMES "${header_name}")
+endforeach()
 
 if(NOT COLLECTION_SOURCES)
   message(FATAL_ERROR
@@ -105,7 +133,7 @@ function(collection_configure_target target)
       $<BUILD_INTERFACE:${COLLECTION_GENERATED_INCLUDE_DIR}>
       $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
     PRIVATE
-      "${CMAKE_CURRENT_SOURCE_DIR}/src")
+      ${COLLECTION_SOURCE_INCLUDE_DIRS})
 
   target_link_libraries(${target} PUBLIC Threads::Threads)
 
