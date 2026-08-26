@@ -1,22 +1,19 @@
 /*
  * list - public interface.
  *
- * Before you commit:
- *   1. prefix the include guard below with COLLECTION_, so that it reads
- *      COLLECTION_<MODULE>_H
- *   2. tag every public declaration with COLLECTION_API
- *   3. include what you use: <stdbool.h>, <stddef.h>, <stdint.h>, ...
- *
- * Naming: functions are list_<verb>, the main type is list_t, and macros
- * are COLLECTION_<MODULE>_<NAME>.
+ * Naming: every exported name carries the coll_ prefix, so functions are
+ * coll_list_<verb> and the main type is coll_list, with no _t suffix: POSIX
+ * reserves that one. Macros are COLLECTION_<MODULE>_<NAME>: they never reach
+ * the linker, so they keep the longer prefix.
  *
  * Errors: return int status codes from collection_error.h, COLLECTION_OK
  * on success and a negative code on failure. Results go in out
  * parameters. Define an E_<MODULE>_<NAME> code counting down from
  * COLLECTION_EMODULE_BASE only when no shared code fits.
  *
- * Ownership: the caller owns the handle. Provide %1$s_init(%1$s_t *)
- * and %1$s_destroy(%1$s_t *) rather than allocating and returning one.
+ * Ownership: the caller owns the handle. Provide coll_list_init(coll_list *)
+ * and coll_list_destroy(coll_list *) rather than allocating and returning
+ * one.
  */
 
 #ifndef COLLECTION_LIST_H
@@ -26,38 +23,40 @@
 
 #include <stddef.h>
 
-/* defined in list.c, so the element layout stays out of the ABI */
-struct node;
+/* defined in list.c, so the element layout stays out of the ABI. Every module
+   names its node tag after itself, so the tags stay distinct once every header
+   lands in the same translation unit through <collection.h> */
+struct coll_list_node;
 
 /**
  * @brief a singly linked list of byte-copied elements
  *
- * The caller owns the storage, so a list_t can live on the stack, in static
- * storage or inside another struct. Initialize it with list_init() before
- * any other call and release its elements with list_destroy().
+ * The caller owns the storage, so a coll_list can live on the stack, in
+ * static storage or inside another struct. Initialize it with coll_list_init()
+ * before any other call and release its elements with coll_list_destroy().
  *
- * @note the fields are internal. Read the size with list_get_size() and the
- * first node with list_get_first() instead of touching them directly
+ * @note the fields are internal. Read the size with coll_list_get_size() and
+ * the first node with coll_list_get_first() instead of touching them directly
  */
-typedef struct list
+typedef struct coll_list
 {
-    struct node *first;
-    struct node *last;
-    size_t       size;
-} list_t;
+    struct coll_list_node *first;
+    struct coll_list_node *last;
+    size_t                 size;
+} coll_list;
 
 /**
  * @brief comparison deciding the order of two elements of a list
  *
- * Handed to list_sort() and called with the data pointers of the two elements
- * being compared, in the same spirit as the callback qsort() takes. Return a
- * negative value when a belongs before b, a positive value when it belongs
- * after it, and 0 when the two are equivalent.
+ * Handed to coll_list_sort() and called with the data pointers of the two
+ * elements being compared, in the same spirit as the callback qsort() takes.
+ * Return a negative value when a belongs before b, a positive value when it
+ * belongs after it, and 0 when the two are equivalent.
  *
  * @note the elements belong to the list: a comparison must not modify them,
  * and must not touch the list itself
  */
-typedef int (*list_cmp_t)(const void *a, const void *b);
+typedef int (*coll_list_cmp)(const void *a, const void *b);
 
 /**
  * @brief initializes a list, optionally prefilled with a default value
@@ -73,21 +72,22 @@ typedef int (*list_cmp_t)(const void *a, const void *b);
  * non-zero and elem_size is 0, COLLECTION_ENOMEM if an element could not be
  * allocated
  * @note unless l itself was NULL, a failed call leaves l a valid empty list,
- * so it can be reused or passed to list_destroy() without leaking
+ * so it can be reused or passed to coll_list_destroy() without leaking
  * @note l and def_val must not overlap
  */
-COLLECTION_API int list_init(list_t *restrict l, size_t size,
-                             const void *restrict def_val, size_t elem_size);
+COLLECTION_API int coll_list_init(coll_list *restrict l, size_t size,
+                                  const void *restrict def_val,
+                                  size_t elem_size);
 
 /**
  * @brief frees every element of the list, leaving it empty
  *
  * @param l pointer to the list to empty
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if l is NULL
- * @note the list_t belongs to the caller and is not freed. Afterwards l is a
- * valid empty list and can be reused without calling list_init() again
+ * @note the coll_list belongs to the caller and is not freed. Afterwards l is
+ * a valid empty list and can be reused without calling coll_list_init() again
  */
-COLLECTION_API int list_destroy(list_t *l);
+COLLECTION_API int coll_list_destroy(coll_list *l);
 
 /**
  * @brief appends a copy of a generic element at the end of the list
@@ -100,8 +100,9 @@ COLLECTION_API int list_destroy(list_t *l);
  * element could not be allocated
  * @note l and value must not overlap
  */
-COLLECTION_API int list_append(list_t *restrict l, const void *restrict value,
-                               size_t elem_size);
+COLLECTION_API int coll_list_append(coll_list *restrict l,
+                                    const void *restrict value,
+                                    size_t elem_size);
 
 /**
  * @brief inserts a copy of a generic element at the given position
@@ -119,8 +120,9 @@ COLLECTION_API int list_append(list_t *restrict l, const void *restrict value,
  * one position up. Nothing is overwritten
  * @note l and value must not overlap
  */
-COLLECTION_API int list_add_at(list_t *restrict l, size_t index,
-                               const void *restrict value, size_t elem_size);
+COLLECTION_API int coll_list_add_at(coll_list *restrict l, size_t index,
+                                    const void *restrict value,
+                                    size_t elem_size);
 
 /**
  * @brief removes the first element whose data matches the given value
@@ -135,8 +137,9 @@ COLLECTION_API int list_add_at(list_t *restrict l, size_t index,
  * if no element matched
  * @note l and value must not overlap
  */
-COLLECTION_API int list_remove(list_t *restrict l, const void *restrict value,
-                               size_t elem_size);
+COLLECTION_API int coll_list_remove(coll_list *restrict l,
+                                    const void *restrict value,
+                                    size_t elem_size);
 
 /**
  * @brief removes every element whose data matches the given value
@@ -151,9 +154,9 @@ COLLECTION_API int list_remove(list_t *restrict l, const void *restrict value,
  * COLLECTION_ENOTFOUND if no element matched
  * @note l and value must not overlap
  */
-COLLECTION_API int list_remove_all(list_t *restrict l,
-                                   const void *restrict value,
-                                   size_t elem_size);
+COLLECTION_API int coll_list_remove_all(coll_list *restrict l,
+                                        const void *restrict value,
+                                        size_t elem_size);
 
 /**
  * @brief removes the element at the given position
@@ -163,7 +166,7 @@ COLLECTION_API int list_remove_all(list_t *restrict l,
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if l is NULL,
  * COLLECTION_ERANGE if index is not smaller than the size of the list
  */
-COLLECTION_API int list_remove_at(list_t *l, size_t index);
+COLLECTION_API int coll_list_remove_at(coll_list *l, size_t index);
 
 /**
  * @brief sorts the list in place, ordering its elements with the given
@@ -177,15 +180,15 @@ COLLECTION_API int list_remove_at(list_t *l, size_t index);
  * order they had before the call
  * @note a list of fewer than two elements is already sorted, so it succeeds
  * without cmp ever being called
- * @note the nodes are relinked rather than reallocated, so an element keeps
- * its address and only changes position. Any node held from an earlier
- * list_at() or list_get_first() stays valid but no longer sits at the index it
- * came from
+ * @note the nodes are relinked rather than reallocated, so an element keeps its
+ * address and only changes position. Any node held from an earlier
+ * coll_list_at() or coll_list_get_first() stays valid but no longer sits at the
+ * index it came from
  * @note cmp is handed no size, so it has to know the layout of the elements on
  * its own. A list holding elements of different sizes can only be sorted by a
  * comparison that can tell them apart by itself
  */
-COLLECTION_API int list_sort(list_t *l, list_cmp_t cmp);
+COLLECTION_API int coll_list_sort(coll_list *l, coll_list_cmp cmp);
 
 /**
  * @brief reverses the list in place, so the element that was last comes first
@@ -194,16 +197,16 @@ COLLECTION_API int list_sort(list_t *l, list_cmp_t cmp);
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if l is NULL
  * @note a list of fewer than two elements is already its own reverse, so it
  * succeeds without anything being touched
- * @note the nodes are relinked rather than reallocated, so an element keeps
- * its address and only changes position. Any node held from an earlier
- * list_at() or list_get_first() stays valid but no longer sits at the index it
- * came from
+ * @note the nodes are relinked rather than reallocated, so an element keeps its
+ * address and only changes position. Any node held from an earlier
+ * coll_list_at() or coll_list_get_first() stays valid but no longer sits at the
+ * index it came from
  * @note reversing allocates nothing, so it cannot fail partway and leave the
  * list half turned around
  * @note this is not the same as sorting with the opposite comparison: it
  * turns around the order the list is actually in, whatever that order is
  */
-COLLECTION_API int list_reverse(list_t *l);
+COLLECTION_API int coll_list_reverse(coll_list *l);
 
 /**
  * @brief finds the position of the first element whose data matches the given
@@ -221,9 +224,9 @@ COLLECTION_API int list_reverse(list_t *l);
  * COLLECTION_ENOTFOUND if no element matched
  * @note l, value and index must not overlap
  */
-COLLECTION_API int list_find(const list_t *restrict l,
-                             const void *restrict value, size_t elem_size,
-                             size_t *restrict index);
+COLLECTION_API int coll_list_find(const coll_list *restrict l,
+                                  const void *restrict value, size_t elem_size,
+                                  size_t *restrict index);
 
 /**
  * @brief reads the node at the given position
@@ -237,8 +240,8 @@ COLLECTION_API int list_find(const list_t *restrict l,
  * is removed or the list is destroyed
  * @note l and node must not overlap
  */
-COLLECTION_API int list_at(const list_t *restrict l, size_t index,
-                           struct node **restrict node);
+COLLECTION_API int coll_list_at(const coll_list *restrict l, size_t index,
+                                struct coll_list_node **restrict node);
 
 /**
  * @brief reads the number of elements in the list
@@ -250,8 +253,8 @@ COLLECTION_API int list_at(const list_t *restrict l, size_t index,
  * NULL
  * @note l and size must not overlap
  */
-COLLECTION_API int list_get_size(const list_t *restrict l,
-                                 size_t *restrict size);
+COLLECTION_API int coll_list_get_size(const coll_list *restrict l,
+                                      size_t *restrict size);
 
 /**
  * @brief reads the first node of the list
@@ -263,7 +266,7 @@ COLLECTION_API int list_get_size(const list_t *restrict l,
  * NULL
  * @note l and first must not overlap
  */
-COLLECTION_API int list_get_first(const list_t *restrict l,
-                                  struct node **restrict first);
+COLLECTION_API int coll_list_get_first(const coll_list *restrict l,
+                                       struct coll_list_node **restrict first);
 
 #endif // COLLECTION_LIST_H

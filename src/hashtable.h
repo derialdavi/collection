@@ -1,17 +1,20 @@
 /*
  * hashtable - public interface.
  *
- * Naming: functions are hashtable_<verb>, the main type is hashtable_t, and
- * macros are COLLECTION_<MODULE>_<NAME>.
+ * Naming: every exported name carries the coll_ prefix, so functions are
+ * coll_hashtable_<verb> and the main type is coll_hashtable, with no _t
+ * suffix: POSIX reserves that one. Macros are COLLECTION_<MODULE>_<NAME>: they
+ * never reach the linker, so they keep the longer prefix.
  *
  * Errors: return int status codes from collection_error.h, COLLECTION_OK
  * on success and a negative code on failure. Results go in out
  * parameters. Define an E_<MODULE>_<NAME> code counting down from
  * COLLECTION_EMODULE_BASE only when no shared code fits.
  *
- * Ownership: the caller owns the handle. Provide hashtable_init(hashtable_t *)
- * and hashtable_destroy(hashtable_t *) rather than allocating and returning
- * one.
+ * Ownership: the caller owns the handle. Provide
+ * coll_hashtable_init(coll_hashtable *) and
+ * coll_hashtable_destroy(coll_hashtable *) rather than allocating and
+ * returning one.
  */
 
 #ifndef COLLECTION_HASHTABLE_H
@@ -32,14 +35,14 @@
 #define COLLECTION_HASHTABLE_INITIAL_BUCKETS 16
 
 /* defined in hashtable.c, so the pair layout stays out of the ABI */
-struct hashtable_pair;
+struct coll_hashtable_pair;
 
 /**
  * @brief hash of a key, deciding which bucket a pair lands in
  *
- * Handed to hashtable_init() and called with the bytes of a key and the size
- * those bytes were stored with. Return any size_t: the table reduces it to a
- * bucket index itself.
+ * Handed to coll_hashtable_init() and called with the bytes of a key and the
+ * size those bytes were stored with. Return any size_t: the table reduces it to
+ * a bucket index itself.
  *
  * The only hard requirement is consistency with the comparison the table was
  * initialized with. Two keys the comparison calls equal must hash the same,
@@ -49,98 +52,100 @@ struct hashtable_pair;
  *
  * @note the key belongs to the table: a hash must not modify it, and must not
  * touch the table itself
- * @note pass NULL to hashtable_init() to get hashtable_hash_bytes()
+ * @note pass NULL to coll_hashtable_init() to get coll_hashtable_hash_bytes()
  */
-typedef size_t (*hashtable_hash_t)(const void *key, size_t key_size);
+typedef size_t (*coll_hashtable_hash)(const void *key, size_t key_size);
 
 /**
  * @brief comparison deciding whether two keys are the same key
  *
- * Handed to hashtable_init() and called with the bytes of the key being looked
- * up and the bytes of a key already in the bucket, each with the size it was
- * stored with. Return 0 when the two are the same key and any non-zero value
- * when they are not.
+ * Handed to coll_hashtable_init() and called with the bytes of the key being
+ * looked up and the bytes of a key already in the bucket, each with the size it
+ * was stored with. Return 0 when the two are the same key and any non-zero
+ * value when they are not.
  *
  * A hash table only ever asks whether two keys are equal, so, unlike the
- * comparison list_sort() takes, the sign of a non-zero result means nothing
- * and an ordering is not required.
+ * comparison coll_list_sort() takes, the sign of a non-zero result means
+ * nothing and an ordering is not required.
  *
  * @note the keys belong to the table: a comparison must not modify them, and
  * must not touch the table itself
- * @note pass NULL to hashtable_init() to get hashtable_cmp_bytes()
+ * @note pass NULL to coll_hashtable_init() to get coll_hashtable_cmp_bytes()
  */
-typedef int (*hashtable_cmp_t)(const void *key1, size_t key1_size,
-                               const void *key2, size_t key2_size);
+typedef int (*coll_hashtable_cmp)(const void *key1, size_t key1_size,
+                                    const void *key2, size_t key2_size);
 
 /**
  * @brief a table of byte-copied key/value pairs, looked up by key
  *
- * The caller owns the storage, so a hashtable_t can live on the stack, in
+ * The caller owns the storage, so a coll_hashtable can live on the stack, in
  * static storage or inside another struct. Initialize it with
- * hashtable_init() before any other call and release its pairs with
- * hashtable_destroy().
+ * coll_hashtable_init() before any other call and release its pairs with
+ * coll_hashtable_destroy().
  *
- * A pair is entered with hashtable_put() and found again with
- * hashtable_get(), which copies the value out. Both the key and the value are
- * copied into the table, so neither has to outlive the call that stored it.
+ * A pair is entered with coll_hashtable_put() and found again with
+ * coll_hashtable_get(), which copies the value out. Both the key and the value
+ * are copied into the table, so neither has to outlive the call that stored it.
  * A key is present at most once: putting a key that is already there replaces
  * its value.
  *
  * Pairs are held in buckets chosen by the hash function, with collisions
  * chained, and the bucket array is resized as the table fills and empties, so
  * lookups stay flat as the table grows. The order pairs come back in from
- * hashtable_get_pair() follows that internal layout and is not the order they
- * were put in.
+ * coll_hashtable_get_pair() follows that internal layout and is not the order
+ * they were put in.
  *
  * @note the fields are internal. Read the number of pairs with
- * hashtable_get_size() instead of touching them directly
+ * coll_hashtable_get_size() instead of touching them directly
  */
-typedef struct hashtable
+typedef struct coll_hashtable
 {
-    struct hashtable_pair **buckets;
-    size_t                  buckets_size;
-    size_t                  size;
-    hashtable_hash_t        hash;
-    hashtable_cmp_t         cmp;
-    /* where hashtable_get_pair() resumes: the bucket to look at next, and the
-       pair inside it, NULL once that bucket is exhausted */
-    size_t                  cursor_bucket;
-    struct hashtable_pair  *cursor_pair;
-} hashtable_t;
+    struct coll_hashtable_pair **buckets;
+    size_t                       buckets_size;
+    size_t                       size;
+    coll_hashtable_hash          hash;
+    coll_hashtable_cmp           cmp;
+    /* where coll_hashtable_get_pair() resumes: the bucket to look at next, and
+       the pair inside it, NULL once that bucket is exhausted */
+    size_t                       cursor_bucket;
+    struct coll_hashtable_pair  *cursor_pair;
+} coll_hashtable;
 
 /**
  * @brief initializes an empty hashtable with the given hash and comparison
  *
  * @param ht pointer to the hashtable to initialize, allocated by the caller
- * @param hash hash of a key, or NULL for hashtable_hash_bytes()
+ * @param hash hash of a key, or NULL for coll_hashtable_hash_bytes()
  * @param cmp comparison deciding whether two keys are the same key, or NULL
- * for hashtable_cmp_bytes()
+ * for coll_hashtable_cmp_bytes()
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if ht is NULL,
  * COLLECTION_ENOMEM if the bucket array could not be allocated
  * @note hash and cmp have to agree: keys cmp calls equal must hash the same.
  * Passing NULL for both is the safe way to get a pair that does
- * @note unless ht itself was NULL, a failed call leaves ht a valid empty
- * table, so it can be reused or passed to hashtable_destroy() without leaking
+ * @note unless ht itself was NULL, a failed call leaves ht a valid empty table,
+ * so it can be reused or passed to coll_hashtable_destroy() without leaking
  */
-COLLECTION_API int hashtable_init(hashtable_t *ht, hashtable_hash_t hash,
-                                  hashtable_cmp_t cmp);
+COLLECTION_API int coll_hashtable_init(coll_hashtable *ht,
+                                       coll_hashtable_hash hash,
+                                       coll_hashtable_cmp cmp);
 
 /**
  * @brief frees every pair of the hashtable, leaving it empty
  *
  * @param ht pointer to the hashtable to empty
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if ht is NULL
- * @note the hashtable_t belongs to the caller and is not freed. Afterwards ht
- * is a valid empty table, holding the hash and the comparison it was
- * initialized with, and can be reused without calling hashtable_init() again
+ * @note the coll_hashtable belongs to the caller and is not freed. Afterwards
+ * ht is a valid empty table, holding the hash and the comparison it was
+ * initialized with, and can be reused without calling coll_hashtable_init()
+ * again
  * @note the bucket array is released along with the pairs, so a destroyed
  * table owns no memory at all and the handle can simply be dropped. It is
- * still usable: the next hashtable_put() gives it a fresh array of
+ * still usable: the next coll_hashtable_put() gives it a fresh array of
  * COLLECTION_HASHTABLE_INITIAL_BUCKETS buckets
- * @note the iteration is rewound, so the next hashtable_get_pair() starts
+ * @note the iteration is rewound, so the next coll_hashtable_get_pair() starts
  * over
  */
-COLLECTION_API int hashtable_destroy(hashtable_t *ht);
+COLLECTION_API int coll_hashtable_destroy(coll_hashtable *ht);
 
 /**
  * @brief stores a copy of a key and its value, replacing any value the key
@@ -159,13 +164,13 @@ COLLECTION_API int hashtable_destroy(hashtable_t *ht);
  * different size than the one it replaces
  * @note a failed put changes nothing: the key keeps the value it had
  * @note a successful put rewinds the iteration, because growing the table
- * moves pairs between buckets. See hashtable_get_pair()
+ * moves pairs between buckets. See coll_hashtable_get_pair()
  * @note ht, key and value must not overlap
  */
-COLLECTION_API int hashtable_put(hashtable_t *restrict ht,
-                                 const void *restrict key, size_t key_size,
-                                 const void *restrict value,
-                                 size_t value_size);
+COLLECTION_API int coll_hashtable_put(coll_hashtable *restrict ht,
+                                      const void *restrict key, size_t key_size,
+                                      const void *restrict value,
+                                      size_t value_size);
 
 /**
  * @brief copies out the value stored under a key
@@ -181,12 +186,12 @@ COLLECTION_API int hashtable_put(hashtable_t *restrict ht,
  * does not match the size of the stored value, COLLECTION_ENOTFOUND if the
  * key is not in the table
  * @note a caller that does not already know the layout can ask
- * hashtable_get_value_size() how much storage to provide
+ * coll_hashtable_get_value_size() how much storage to provide
  * @note ht, key and value must not overlap
  */
-COLLECTION_API int hashtable_get(const hashtable_t *restrict ht,
-                                 const void *restrict key, size_t key_size,
-                                 void *restrict value, size_t value_size);
+COLLECTION_API int coll_hashtable_get(const coll_hashtable *restrict ht,
+                                      const void *restrict key, size_t key_size,
+                                      void *restrict value, size_t value_size);
 
 /**
  * @brief reads the size of the value stored under a key
@@ -200,14 +205,13 @@ COLLECTION_API int hashtable_get(const hashtable_t *restrict ht,
  * value_size is NULL, COLLECTION_EINVAL if key_size is 0,
  * COLLECTION_ENOTFOUND if the key is not in the table
  * @note a table can hold values of different sizes. This is how a caller that
- * does not already know the layout finds out how much storage hashtable_get()
- * expects
+ * does not already know the layout finds out how much storage
+ * coll_hashtable_get() expects
  * @note ht, key and value_size must not overlap
  */
-COLLECTION_API int hashtable_get_value_size(const hashtable_t *restrict ht,
-                                            const void *restrict key,
-                                            size_t key_size,
-                                            size_t *restrict value_size);
+COLLECTION_API int coll_hashtable_get_value_size(
+    const coll_hashtable *restrict ht, const void *restrict key,
+    size_t key_size, size_t *restrict value_size);
 
 /**
  * @brief tells whether a key is in the hashtable
@@ -223,9 +227,10 @@ COLLECTION_API int hashtable_get_value_size(const hashtable_t *restrict ht,
  * COLLECTION_ENOTFOUND: asking whether a key is there succeeds either way
  * @note ht, key and contains must not overlap
  */
-COLLECTION_API int hashtable_contains(const hashtable_t *restrict ht,
-                                      const void *restrict key,
-                                      size_t key_size, bool *restrict contains);
+COLLECTION_API int coll_hashtable_contains(const coll_hashtable *restrict ht,
+                                           const void *restrict key,
+                                           size_t key_size,
+                                           bool *restrict contains);
 
 /**
  * @brief removes the pair stored under a key
@@ -238,11 +243,12 @@ COLLECTION_API int hashtable_contains(const hashtable_t *restrict ht,
  * is not in the table
  * @note both the stored key and the stored value are freed
  * @note a successful remove rewinds the iteration, because shrinking the
- * table moves pairs between buckets. See hashtable_get_pair()
+ * table moves pairs between buckets. See coll_hashtable_get_pair()
  * @note ht and key must not overlap
  */
-COLLECTION_API int hashtable_remove(hashtable_t *restrict ht,
-                                    const void *restrict key, size_t key_size);
+COLLECTION_API int coll_hashtable_remove(coll_hashtable *restrict ht,
+                                         const void *restrict key,
+                                         size_t key_size);
 
 /**
  * @brief copies out the next pair of the hashtable, advancing to the one
@@ -266,23 +272,25 @@ COLLECTION_API int hashtable_remove(hashtable_t *restrict ht,
  * iteration has handed out every pair
  * @note the cursor only moves when the call succeeds: a size mismatch leaves
  * the same pair waiting, so the caller can ask
- * hashtable_peek_pair_size() for the right sizes and try again
+ * coll_hashtable_peek_pair_size() for the right sizes and try again
  * @note the pair is copied out, not removed. Iterating does not empty the
  * table
- * @note hashtable_put(), hashtable_remove() and hashtable_destroy() rewind
- * the cursor when they succeed, so a loop that changes the table while
- * walking it starts the walk over rather than skipping or repeating pairs at
- * random. Collect what you need first, then change the table
+ * @note coll_hashtable_put(), coll_hashtable_remove() and
+ * coll_hashtable_destroy() rewind the cursor when they succeed, so a loop that
+ * changes the table while walking it starts the walk over rather than skipping
+ * or repeating pairs at random. Collect what you need first, then change the
+ * table
  * @note the order is the internal bucket order, not the order pairs were put
  * in, and it changes when the table is resized
  * @note ht, key and value must not overlap
  */
-COLLECTION_API int hashtable_get_pair(hashtable_t *restrict ht,
-                                      void *restrict key, size_t key_size,
-                                      void *restrict value, size_t value_size);
+COLLECTION_API int coll_hashtable_get_pair(coll_hashtable *restrict ht,
+                                           void *restrict key, size_t key_size,
+                                           void *restrict value,
+                                           size_t value_size);
 
 /**
- * @brief reads the sizes of the pair hashtable_get_pair() would hand back
+ * @brief reads the sizes of the pair coll_hashtable_get_pair() would hand back
  * next, without advancing
  *
  * @param ht pointer to the hashtable to read from
@@ -295,16 +303,16 @@ COLLECTION_API int hashtable_get_pair(hashtable_t *restrict ht,
  * every pair
  * @note a table can hold keys and values of different sizes. This is how a
  * caller that does not already know the layout finds out how much storage
- * hashtable_get_pair() expects
+ * coll_hashtable_get_pair() expects
  * @note ht, key_size and value_size must not overlap
  */
-COLLECTION_API int hashtable_peek_pair_size(const hashtable_t *restrict ht,
-                                            size_t *restrict key_size,
-                                            size_t *restrict value_size);
+COLLECTION_API int coll_hashtable_peek_pair_size(
+    const coll_hashtable *restrict ht, size_t *restrict key_size,
+    size_t *restrict value_size);
 
 /**
- * @brief rewinds the iteration, so the next hashtable_get_pair() starts over
- * from the first pair
+ * @brief rewinds the iteration, so the next coll_hashtable_get_pair() starts
+ * over from the first pair
  *
  * @param ht pointer to the hashtable to rewind
  * @return int COLLECTION_OK on success, COLLECTION_ENULL if ht is NULL
@@ -312,7 +320,7 @@ COLLECTION_API int hashtable_peek_pair_size(const hashtable_t *restrict ht,
  * @note rewinding a table that was never walked, or one that is already at
  * the start, is fine and does nothing
  */
-COLLECTION_API int hashtable_rewind(hashtable_t *ht);
+COLLECTION_API int coll_hashtable_rewind(coll_hashtable *ht);
 
 /**
  * @brief reads the number of pairs in the hashtable
@@ -325,8 +333,8 @@ COLLECTION_API int hashtable_rewind(hashtable_t *ht);
  * internal
  * @note ht and size must not overlap
  */
-COLLECTION_API int hashtable_get_size(const hashtable_t *restrict ht,
-                                      size_t *restrict size);
+COLLECTION_API int coll_hashtable_get_size(const coll_hashtable *restrict ht,
+                                           size_t *restrict size);
 
 /**
  * @brief tells whether the hashtable holds no pairs
@@ -338,16 +346,16 @@ COLLECTION_API int hashtable_get_size(const hashtable_t *restrict ht,
  * NULL
  * @note ht and empty must not overlap
  */
-COLLECTION_API int hashtable_is_empty(const hashtable_t *restrict ht,
-                                      bool *restrict empty);
+COLLECTION_API int coll_hashtable_is_empty(const coll_hashtable *restrict ht,
+                                           bool *restrict empty);
 
 /* ========== DEFAULT HASH FUNCTIONS ========== */
 
 /**
  * @brief hashes a key by its raw bytes, the default hash
  *
- * This is what hashtable_init() uses when it is handed no hash, and it is the
- * one to reach for unless the keys need something else: it makes no
+ * This is what coll_hashtable_init() uses when it is handed no hash, and it is
+ * the one to reach for unless the keys need something else: it makes no
  * assumption about what the bytes mean, so it serves integers, floating point
  * numbers, fixed size buffers and plain structs alike.
  *
@@ -359,34 +367,36 @@ COLLECTION_API int hashtable_is_empty(const hashtable_t *restrict ht,
  * @param key pointer to the bytes to hash
  * @param key_size number of bytes to hash
  * @return size_t the hash, 0 when key is NULL or key_size is 0
- * @note two keys of different sizes hash differently even when the shorter
- * one is a prefix of the longer, which is what hashtable_cmp_bytes() expects
+ * @note two keys of different sizes hash differently even when the shorter one
+ * is a prefix of the longer, which is what coll_hashtable_cmp_bytes() expects
  * @note a struct with padding hashes by its padding too, so two structs with
  * equal members can hash differently. Hash the members, or clear the struct
  * with memset() before filling it in
  */
-COLLECTION_API size_t hashtable_hash_bytes(const void *key, size_t key_size);
+COLLECTION_API size_t coll_hashtable_hash_bytes(const void *key,
+                                                size_t key_size);
 
 /**
  * @brief hashes a key as a string, stopping at the first NUL byte
  *
- * Same folding and mixing as hashtable_hash_bytes(), over the characters of
- * the string rather than over key_size raw bytes: at most key_size bytes are
+ * Same folding and mixing as coll_hashtable_hash_bytes(), over the characters
+ * of the string rather than over key_size raw bytes: at most key_size bytes are
  * read, and fewer when a NUL comes first. So "abc" stored with its terminator
- * and "abc" stored without it hash the same, which is what lets a caller
- * store keys with strlen() + 1 and look them up with strlen(), or the other
- * way round.
+ * and "abc" stored without it hash the same, which is what lets a caller store
+ * keys with strlen() + 1 and look them up with strlen(), or the other way
+ * round.
  *
  * @param key pointer to the string to hash
  * @param key_size number of bytes of key that may be read
  * @return size_t the hash, 0 when key is NULL or key_size is 0
- * @note pair it with hashtable_cmp_string(), which draws the same line at the
- * first NUL. Pairing it with hashtable_cmp_bytes() instead would leave "abc"
- * with and without its terminator hashing alike but comparing unequal, which
- * the table handles as an ordinary collision but which stores the same string
- * twice
+ * @note pair it with coll_hashtable_cmp_string(), which draws the same line at
+ * the first NUL. Pairing it with coll_hashtable_cmp_bytes() instead would leave
+ * "abc" with and without its terminator hashing alike but comparing unequal,
+ * which the table handles as an ordinary collision but which stores the same
+ * string twice
  */
-COLLECTION_API size_t hashtable_hash_string(const void *key, size_t key_size);
+COLLECTION_API size_t coll_hashtable_hash_string(const void *key,
+                                                 size_t key_size);
 
 /* ============================================ */
 
@@ -395,8 +405,8 @@ COLLECTION_API size_t hashtable_hash_string(const void *key, size_t key_size);
 /**
  * @brief compares two keys by their raw bytes, the default comparison
  *
- * This is what hashtable_init() uses when it is handed no comparison. Keys of
- * different sizes are never the same key; keys of the same size are the same
+ * This is what coll_hashtable_init() uses when it is handed no comparison. Keys
+ * of different sizes are never the same key; keys of the same size are the same
  * key when every byte matches.
  *
  * @param key1 pointer to the bytes of the first key
@@ -408,16 +418,16 @@ COLLECTION_API size_t hashtable_hash_string(const void *key, size_t key_size);
  * numbers: 0.0 and -0.0 are equal as numbers but differ in their bytes, and a
  * NaN key matches the NaN with the same bytes even though NaN == NaN is false
  */
-COLLECTION_API int hashtable_cmp_bytes(const void *key1, size_t key1_size,
-                                       const void *key2, size_t key2_size);
+COLLECTION_API int coll_hashtable_cmp_bytes(const void *key1, size_t key1_size,
+                                            const void *key2, size_t key2_size);
 
 /**
  * @brief compares two keys as strings, stopping at the first NUL byte
  *
- * The counterpart of hashtable_hash_string(): at most key1_size and key2_size
- * bytes are read, and the comparison ends at the first NUL, so the same
- * string is the same key whether or not the size it was stored with counted
- * the terminator.
+ * The counterpart of coll_hashtable_hash_string(): at most key1_size and
+ * key2_size bytes are read, and the comparison ends at the first NUL, so the
+ * same string is the same key whether or not the size it was stored with
+ * counted the terminator.
  *
  * @param key1 pointer to the first string
  * @param key1_size number of bytes of key1 that may be read
@@ -428,8 +438,9 @@ COLLECTION_API int hashtable_cmp_bytes(const void *key1, size_t key1_size,
  * spells up to that point, so no read ever goes past the size the key was
  * stored with
  */
-COLLECTION_API int hashtable_cmp_string(const void *key1, size_t key1_size,
-                                        const void *key2, size_t key2_size);
+COLLECTION_API int coll_hashtable_cmp_string(const void *key1, size_t key1_size,
+                                             const void *key2,
+                                             size_t key2_size);
 
 /* ====================================================== */
 

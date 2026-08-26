@@ -15,23 +15,24 @@
 #include <string.h>
 
 /*
- * hashtable.h publishes struct hashtable but keeps struct hashtable_pair
- * opaque, so there is no public way to walk a bucket. These tests mirror the
- * definition from hashtable.c in order to check the chains directly.
+ * hashtable.h publishes struct coll_hashtable but keeps struct
+ * coll_hashtable_pair opaque, so there is no public way to walk a bucket. These
+ * tests mirror the definition from hashtable.c in order to check the chains
+ * directly.
  *
  * KEEP IN SYNC WITH hashtable.c. If the layout there changes and this does
  * not, every check below reads the wrong bytes and can still pass.
  */
-struct hashtable_pair
+struct coll_hashtable_pair
 {
-    void                  *key;
-    size_t                 key_size;
-    void                  *value;
-    size_t                 value_size;
-    struct hashtable_pair *next;
+    void                       *key;
+    size_t                      key_size;
+    void                       *value;
+    size_t                      value_size;
+    struct coll_hashtable_pair *next;
 };
 
-static hashtable_t ht;
+static coll_hashtable ht;
 
 /* how many times the counting hash and comparison below were called, so a
    test can prove the table used the callbacks it was handed */
@@ -40,8 +41,8 @@ static size_t cmp_calls;
 
 void setUp(void)
 {
-    /* poison the handle so a field hashtable_init forgets to write shows up
-       as garbage rather than as a lucky zero */
+    /* poison the handle so a field coll_hashtable_init forgets to write shows
+       up as garbage rather than as a lucky zero */
     memset(&ht, 0xAA, sizeof(ht));
 
     hash_calls = 0;
@@ -60,14 +61,14 @@ void tearDown(void)
 static size_t hash_counting(const void *key, size_t key_size)
 {
     hash_calls++;
-    return hashtable_hash_bytes(key, key_size);
+    return coll_hashtable_hash_bytes(key, key_size);
 }
 
 static int cmp_counting(const void *key1, size_t key1_size, const void *key2,
                         size_t key2_size)
 {
     cmp_calls++;
-    return hashtable_cmp_bytes(key1, key1_size, key2, key2_size);
+    return coll_hashtable_cmp_bytes(key1, key1_size, key2, key2_size);
 }
 
 /* sends every key to the same bucket, so the table becomes one long chain.
@@ -88,10 +89,10 @@ struct int_pair
     int value;
 };
 
-/* asserts that the iteration is where hashtable_init(), hashtable_destroy()
-   and hashtable_rewind() promise to leave it: about to hand back the first
-   pair of the first non-empty bucket */
-static void assert_at_start(const hashtable_t *h)
+/* asserts that the iteration is where coll_hashtable_init(),
+   coll_hashtable_destroy() and coll_hashtable_rewind() promise to leave it:
+   about to hand back the first pair of the first non-empty bucket */
+static void assert_at_start(const coll_hashtable *h)
 {
     TEST_ASSERT_EQUAL_size_t(0, h->cursor_bucket);
     TEST_ASSERT_NULL(h->cursor_pair);
@@ -100,7 +101,7 @@ static void assert_at_start(const hashtable_t *h)
 /* asserts that the bucket array really holds h->size pairs, each of them a
    well formed one. Everything else is checked on top of this, so a table that
    loses or double counts a pair fails here first */
-static void assert_bookkeeping(const hashtable_t *h)
+static void assert_bookkeeping(const coll_hashtable *h)
 {
     if (h->buckets == NULL)
     {
@@ -118,7 +119,8 @@ static void assert_bookkeeping(const hashtable_t *h)
 
     for (size_t i = 0; i < h->buckets_size; i++)
     {
-        for (struct hashtable_pair *p = h->buckets[i]; p != NULL; p = p->next)
+        for (struct coll_hashtable_pair *p = h->buckets[i]; p != NULL;
+             p = p->next)
         {
             TEST_ASSERT_NOT_NULL(p->key);
             TEST_ASSERT_NOT_NULL(p->value);
@@ -134,9 +136,9 @@ static void assert_bookkeeping(const hashtable_t *h)
     TEST_ASSERT_EQUAL_size_t(h->size, seen);
 }
 
-/* asserts that h is the empty table hashtable_init() and hashtable_destroy()
-   promise */
-static void assert_empty(const hashtable_t *h)
+/* asserts that h is the empty table coll_hashtable_init() and
+   coll_hashtable_destroy() promise */
+static void assert_empty(const coll_hashtable *h)
 {
     TEST_ASSERT_EQUAL_size_t(0, h->size);
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS,
@@ -150,9 +152,9 @@ static void assert_empty(const hashtable_t *h)
     assert_bookkeeping(h);
 }
 
-/* asserts that h is the released table hashtable_destroy() promises: empty,
-   still set up, and owning nothing the caller would have to free */
-static void assert_released(const hashtable_t *h)
+/* asserts that h is the released table coll_hashtable_destroy() promises:
+   empty, still set up, and owning nothing the caller would have to free */
+static void assert_released(const coll_hashtable *h)
 {
     TEST_ASSERT_EQUAL_size_t(0, h->size);
     TEST_ASSERT_NULL(h->buckets);
@@ -165,8 +167,8 @@ static void assert_released(const hashtable_t *h)
 /* asserts that h holds exactly the count int pairs in expected, by asking for
    every one of them back. The order they sit in is the table's business, so
    this says nothing about it */
-static void assert_contents(const hashtable_t *h, const struct int_pair *expected,
-                            size_t count)
+static void assert_contents(const coll_hashtable *h,
+                            const struct int_pair *expected, size_t count)
 {
     TEST_ASSERT_EQUAL_size_t(count, h->size);
     assert_bookkeeping(h);
@@ -176,26 +178,26 @@ static void assert_contents(const hashtable_t *h, const struct int_pair *expecte
         int out = 0;
 
         TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_get(h, &expected[i].key,
-                                            sizeof(expected[i].key), &out,
-                                            sizeof(out)));
+                              coll_hashtable_get(h, &expected[i].key,
+                                                 sizeof(expected[i].key), &out,
+                                                 sizeof(out)));
         TEST_ASSERT_EQUAL_INT(expected[i].value, out);
     }
 }
 
-/* rewinds h and walks it to the end, asserting that hashtable_get_pair()
+/* rewinds h and walks it to the end, asserting that coll_hashtable_get_pair()
    hands back exactly the count int pairs in expected, each of them once.
    Which order they come in is not part of the contract, so expected is
    treated as a set */
-static void assert_walk_yields(hashtable_t *h, const struct int_pair *expected,
-                               size_t count)
+static void assert_walk_yields(coll_hashtable *h,
+                               const struct int_pair *expected, size_t count)
 {
     /* at most as many flags as there are pairs, sized for the largest table
        these tests build */
     bool seen[64] = { false };
 
     TEST_ASSERT_TRUE(count <= 64);
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_rewind(h));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_rewind(h));
 
     for (size_t i = 0; i < count; i++)
     {
@@ -203,8 +205,8 @@ static void assert_walk_yields(hashtable_t *h, const struct int_pair *expected,
         int value = 0;
 
         TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_get_pair(h, &key, sizeof(key), &value,
-                                                 sizeof(value)));
+                              coll_hashtable_get_pair(h, &key, sizeof(key),
+                                                      &value, sizeof(value)));
 
         bool matched = false;
 
@@ -226,35 +228,36 @@ static void assert_walk_yields(hashtable_t *h, const struct int_pair *expected,
     int key   = 0x1234;
     int value = 0x5678;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_get_pair(h, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_get_pair(h, &key, sizeof(key), &value, sizeof(value)));
     TEST_ASSERT_EQUAL_INT(0x1234, key);
     TEST_ASSERT_EQUAL_INT(0x5678, value);
 }
 
 /* fixture: an initialized table holding count int pairs, built with the API
    and with the default hash and comparison */
-static void fill(hashtable_t *h, const struct int_pair *pairs, size_t count)
+static void fill(coll_hashtable *h, const struct int_pair *pairs,
+                 size_t count)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(h, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(h, NULL, NULL));
 
     for (size_t i = 0; i < count; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(h, &pairs[i].key,
-                                            sizeof(pairs[i].key),
-                                            &pairs[i].value,
-                                            sizeof(pairs[i].value)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(h, &pairs[i].key, sizeof(pairs[i].key),
+                               &pairs[i].value, sizeof(pairs[i].value)));
 
     assert_contents(h, pairs, count);
 }
 
 /* the number of pairs in the chain of bucket index */
-static size_t chain_length(const hashtable_t *h, size_t index)
+static size_t chain_length(const coll_hashtable *h, size_t index)
 {
     size_t length = 0;
 
-    for (struct hashtable_pair *p = h->buckets[index]; p != NULL; p = p->next)
+    for (struct coll_hashtable_pair *p = h->buckets[index]; p != NULL;
+         p = p->next)
         length++;
 
     return length;
@@ -264,21 +267,22 @@ static size_t chain_length(const hashtable_t *h, size_t index)
 
 void test_hashtable_should_InitAnEmptyTableWithABucketArrayReady(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
-void test_hashtable_should_DefaultToTheByteHashAndComparisonWhenGivenNeither(void)
+void test_hashtable_should_DefaultToTheByteHashAndComparisonWhenGivenNeither(
+    void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
-    TEST_ASSERT_EQUAL_PTR(hashtable_hash_bytes, ht.hash);
-    TEST_ASSERT_EQUAL_PTR(hashtable_cmp_bytes, ht.cmp);
+    TEST_ASSERT_EQUAL_PTR(coll_hashtable_hash_bytes, ht.hash);
+    TEST_ASSERT_EQUAL_PTR(coll_hashtable_cmp_bytes, ht.cmp);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_KeepTheHashAndComparisonItWasGiven(void)
@@ -287,46 +291,47 @@ void test_hashtable_should_KeepTheHashAndComparisonItWasGiven(void)
     const int value = 7;
     int       out   = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hash_counting, cmp_counting));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK, coll_hashtable_init(&ht, hash_counting, cmp_counting));
 
     TEST_ASSERT_EQUAL_PTR(hash_counting, ht.hash);
     TEST_ASSERT_EQUAL_PTR(cmp_counting, ht.cmp);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &key, sizeof(key), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get(&ht, &key, sizeof(key), &out, sizeof(out)));
 
     /* they are not just stored, they are the ones actually used */
     TEST_ASSERT_TRUE(hash_calls > 0);
     TEST_ASSERT_TRUE(cmp_calls > 0);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_FillInOnlyTheMissingHalfOfThePair(void)
 {
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hash_counting, NULL));
+                          coll_hashtable_init(&ht, hash_counting, NULL));
     TEST_ASSERT_EQUAL_PTR(hash_counting, ht.hash);
-    TEST_ASSERT_EQUAL_PTR(hashtable_cmp_bytes, ht.cmp);
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_PTR(coll_hashtable_cmp_bytes, ht.cmp);
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 
     memset(&ht, 0xAA, sizeof(ht));
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, NULL, cmp_counting));
-    TEST_ASSERT_EQUAL_PTR(hashtable_hash_bytes, ht.hash);
+                          coll_hashtable_init(&ht, NULL, cmp_counting));
+    TEST_ASSERT_EQUAL_PTR(coll_hashtable_hash_bytes, ht.hash);
     TEST_ASSERT_EQUAL_PTR(cmp_counting, ht.cmp);
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectANullTablePointerOnInit(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_init(NULL, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
+                          coll_hashtable_init(NULL, NULL, NULL));
 }
 
 /* -- DESTROY ------------------------------------------------------------ */
@@ -337,21 +342,21 @@ void test_hashtable_should_EmptyTheTableOnDestroyAndLeaveItReusable(void)
 
     fill(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
     assert_released(&ht);
 
-    /* usable again without a second hashtable_init, which means putting a
+    /* usable again without a second coll_hashtable_init, which means putting a
        pair into a table that no longer owns a bucket array */
     const struct int_pair again = { 9, 90 };
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &again.key, sizeof(again.key),
-                                        &again.value, sizeof(again.value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK, coll_hashtable_put(&ht, &again.key, sizeof(again.key),
+                                          &again.value, sizeof(again.value)));
     assert_contents(&ht, &again, 1);
 
     /* and destroying an already destroyed table is harmless */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
     assert_released(&ht);
 }
 
@@ -359,13 +364,13 @@ void test_hashtable_should_KeepTheHashAndComparisonAcrossDestroy(void)
 {
     const struct int_pair pair = { 1, 10 };
 
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK, coll_hashtable_init(&ht, hash_counting, cmp_counting));
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hash_counting, cmp_counting));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &pair.key, sizeof(pair.key),
-                                        &pair.value, sizeof(pair.value)));
+                          coll_hashtable_put(&ht, &pair.key, sizeof(pair.key),
+                                             &pair.value, sizeof(pair.value)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 
     /* the callbacks belong to the table, not to the pairs it happened to
        hold, so a reused table still hashes the way it was set up to */
@@ -374,24 +379,25 @@ void test_hashtable_should_KeepTheHashAndComparisonAcrossDestroy(void)
 
     hash_calls = 0;
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &pair.key, sizeof(pair.key),
-                                        &pair.value, sizeof(pair.value)));
+                          coll_hashtable_put(&ht, &pair.key, sizeof(pair.key),
+                                             &pair.value, sizeof(pair.value)));
     TEST_ASSERT_TRUE(hash_calls > 0);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReleaseTheBucketArrayOnDestroy(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     for (int i = 0; i < 40; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
 
     TEST_ASSERT_TRUE(ht.buckets_size > COLLECTION_HASHTABLE_INITIAL_BUCKETS);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 
     /* a destroyed table owns nothing: the array it grew is gone too, so a
        caller that is done with it can drop the handle and leak nothing. The
@@ -402,14 +408,14 @@ void test_hashtable_should_ReleaseTheBucketArrayOnDestroy(void)
     /* and it builds itself a new one when it is next used */
     const struct int_pair again = { 1, 10 };
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &again.key, sizeof(again.key),
-                                        &again.value, sizeof(again.value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK, coll_hashtable_put(&ht, &again.key, sizeof(again.key),
+                                          &again.value, sizeof(again.value)));
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS,
                              ht.buckets_size);
     assert_contents(&ht, &again, 1);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RewindTheIterationOnDestroy(void)
@@ -420,11 +426,11 @@ void test_hashtable_should_RewindTheIterationOnDestroy(void)
 
     fill(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 
     /* a cursor left pointing into a freed chain would be walked next time */
     assert_at_start(&ht);
@@ -432,7 +438,7 @@ void test_hashtable_should_RewindTheIterationOnDestroy(void)
 
 void test_hashtable_should_RejectANullTablePointerOnDestroy(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_destroy(NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, coll_hashtable_destroy(NULL));
 }
 
 /* -- PUT ---------------------------------------------------------------- */
@@ -442,16 +448,16 @@ void test_hashtable_should_StoreACopyOfBothTheKeyAndTheValue(void)
     const int key   = 0x1234;
     const int value = 0x5678;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
 
     TEST_ASSERT_EQUAL_size_t(1, ht.size);
     assert_bookkeeping(&ht);
 
     /* exactly one pair, wherever the hash put it */
-    struct hashtable_pair *stored = NULL;
+    struct coll_hashtable_pair *stored = NULL;
 
     for (size_t i = 0; i < ht.buckets_size; i++)
     {
@@ -471,7 +477,7 @@ void test_hashtable_should_StoreACopyOfBothTheKeyAndTheValue(void)
     TEST_ASSERT_NOT_EQUAL_PTR(&key, stored->key);
     TEST_ASSERT_NOT_EQUAL_PTR(&value, stored->value);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReplaceTheValueWhenTheKeyIsAlreadyThere(void)
@@ -483,28 +489,28 @@ void test_hashtable_should_ReplaceTheValueWhenTheKeyIsAlreadyThere(void)
     fill(&ht, pairs, 2);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), &again,
-                                        sizeof(again)));
+                          coll_hashtable_put(&ht, &pairs[0].key,
+                                             sizeof(pairs[0].key), &again,
+                                             sizeof(again)));
 
     /* one key, one pair: replacing is not inserting */
     TEST_ASSERT_EQUAL_size_t(2, ht.size);
     assert_bookkeeping(&ht);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), &out,
-                                        sizeof(out)));
+                          coll_hashtable_get(&ht, &pairs[0].key,
+                                             sizeof(pairs[0].key), &out,
+                                             sizeof(out)));
     TEST_ASSERT_EQUAL_INT(again, out);
 
     /* the other pair was left alone */
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &pairs[1].key,
-                                        sizeof(pairs[1].key), &out,
-                                        sizeof(out)));
+                          coll_hashtable_get(&ht, &pairs[1].key,
+                                             sizeof(pairs[1].key), &out,
+                                             sizeof(out)));
     TEST_ASSERT_EQUAL_INT(pairs[1].value, out);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReplaceAValueWithOneOfADifferentSize(void)
@@ -515,30 +521,29 @@ void test_hashtable_should_ReplaceAValueWithOneOfADifferentSize(void)
     long long       out   = 0;
     size_t          size  = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &small,
-                                        sizeof(small)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &small, sizeof(small)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &big,
-                                        sizeof(big)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &big, sizeof(big)));
 
     TEST_ASSERT_EQUAL_size_t(1, ht.size);
 
     /* the stored size followed the new value, so a get sized for the old one
        is now the mismatch */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_value_size(&ht, &key, sizeof(key),
-                                                   &size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_get_value_size(
+                                             &ht, &key, sizeof(key), &size));
     TEST_ASSERT_EQUAL_size_t(sizeof(big), size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &key, sizeof(key), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get(&ht, &key, sizeof(key), &out, sizeof(out)));
     TEST_ASSERT_EQUAL_HEX64(big, out);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_KeepTheStoredKeyWhenReplacingAValue(void)
@@ -547,18 +552,18 @@ void test_hashtable_should_KeepTheStoredKeyWhenReplacingAValue(void)
     const int first = 10;
     const int again = 20;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, hash_always_zero,
-                                                        NULL));
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &first,
-                                        sizeof(first)));
+                          coll_hashtable_init(&ht, hash_always_zero, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &first, sizeof(first)));
 
-    struct hashtable_pair *pair       = ht.buckets[0];
+    struct coll_hashtable_pair *pair = ht.buckets[0];
     void                  *key_before = pair->key;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &again,
-                                        sizeof(again)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &again, sizeof(again)));
 
     /* the same pair, holding the same key it already had: only the value
        side of it was touched */
@@ -566,7 +571,7 @@ void test_hashtable_should_KeepTheStoredKeyWhenReplacingAValue(void)
     TEST_ASSERT_EQUAL_PTR(key_before, pair->key);
     TEST_ASSERT_EQUAL_MEMORY(&again, pair->value, sizeof(again));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ChainKeysThatLandInTheSameBucket(void)
@@ -575,21 +580,20 @@ void test_hashtable_should_ChainKeysThatLandInTheSameBucket(void)
 
     /* every key hashes to bucket 0, so nothing here is decided by luck */
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hash_always_zero, NULL));
+                          coll_hashtable_init(&ht, hash_always_zero, NULL));
 
     for (size_t i = 0; i < 3; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &pairs[i].key,
-                                            sizeof(pairs[i].key),
-                                            &pairs[i].value,
-                                            sizeof(pairs[i].value)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &pairs[i].key, sizeof(pairs[i].key),
+                               &pairs[i].value, sizeof(pairs[i].value)));
 
     TEST_ASSERT_EQUAL_size_t(3, chain_length(&ht, 0));
 
     /* colliding keys are still three separate pairs, each with its own value */
     assert_contents(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_TellApartKeysOfDifferentSizesWithTheSameBytes(void)
@@ -601,30 +605,30 @@ void test_hashtable_should_TellApartKeysOfDifferentSizesWithTheSameBytes(void)
     const int      second = 200;
     int            out    = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &narrow, sizeof(narrow), &first,
-                                        sizeof(first)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &wide, sizeof(wide), &second,
-                                        sizeof(second)));
+                          coll_hashtable_put(&ht, &narrow, sizeof(narrow),
+                                             &first, sizeof(first)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &wide, sizeof(wide), &second, sizeof(second)));
 
     /* the byte comparison calls keys of different sizes different keys, so
        these are two pairs and not one replaced twice */
     TEST_ASSERT_EQUAL_size_t(2, ht.size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &narrow, sizeof(narrow), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get(&ht, &narrow, sizeof(narrow), &out, sizeof(out)));
     TEST_ASSERT_EQUAL_INT(first, out);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &wide, sizeof(wide), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get(&ht, &wide, sizeof(wide), &out, sizeof(out)));
     TEST_ASSERT_EQUAL_INT(second, out);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectNullPointersOnPut(void)
@@ -632,24 +636,24 @@ void test_hashtable_should_RejectNullPointersOnPut(void)
     const int key   = 1;
     const int value = 10;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_put(NULL, &key, sizeof(key), &value,
-                                        sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_put(&ht, NULL, sizeof(key), &value,
-                                        sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_put(&ht, &key, sizeof(key), NULL,
-                                        sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_put(NULL, &key, sizeof(key), &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_put(&ht, NULL, sizeof(key), &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_put(&ht, &key, sizeof(key), NULL, sizeof(value)));
     /* the sizes are irrelevant: a null pointer is reported before EINVAL */
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_put(&ht, NULL, 0, NULL, 0));
+                          coll_hashtable_put(&ht, NULL, 0, NULL, 0));
 
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectAZeroSizeOnPut(void)
@@ -657,16 +661,18 @@ void test_hashtable_should_RejectAZeroSizeOnPut(void)
     const int key   = 1;
     const int value = 10;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_put(&ht, &key, 0, &value, sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_put(&ht, &key, sizeof(key), &value, 0));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_put(&ht, &key, 0, &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, 0));
 
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportEnomemWhenAPairCannotBeAllocated(void)
@@ -681,20 +687,21 @@ void test_hashtable_should_ReportEnomemWhenAPairCannotBeAllocated(void)
        *number* of pairs instead would put until the machine ran out of
        memory, which is not something a test suite should do to the machine
        running it. */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOMEM,
-                          hashtable_put(&ht, &key, SIZE_MAX, &value,
-                                        sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOMEM,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        SIZE_MAX));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOMEM,
+        coll_hashtable_put(&ht, &key, SIZE_MAX, &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOMEM,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, SIZE_MAX));
 
     /* a failed put leaves the table exactly as it was */
     assert_contents(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
-void test_hashtable_should_KeepTheOldValueWhenAReplacementCannotBeAllocated(void)
+void test_hashtable_should_KeepTheOldValueWhenAReplacementCannotBeAllocated(
+    void)
 {
     const struct int_pair pairs[] = { { 1, 10 }, { 2, 20 } };
     const int             value   = 99;
@@ -702,26 +709,27 @@ void test_hashtable_should_KeepTheOldValueWhenAReplacementCannotBeAllocated(void
     fill(&ht, pairs, 2);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENOMEM,
-                          hashtable_put(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), &value,
-                                        SIZE_MAX));
+                          coll_hashtable_put(&ht, &pairs[0].key,
+                                             sizeof(pairs[0].key), &value,
+                                             SIZE_MAX));
 
     /* the key still has the value it had: the old one is not released until
        the new one is in hand */
     assert_contents(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_GrowTheBucketArrayWhenItFillsUp(void)
 {
     /* 16 buckets grow past three quarters full, so the 13th pair is the one
        that tips it */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     for (int i = 0; i < 12; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
 
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS,
                              ht.buckets_size);
@@ -729,8 +737,8 @@ void test_hashtable_should_GrowTheBucketArrayWhenItFillsUp(void)
     const int tipping = 12;
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &tipping, sizeof(tipping),
-                                        &tipping, sizeof(tipping)));
+                          coll_hashtable_put(&ht, &tipping, sizeof(tipping),
+                                             &tipping, sizeof(tipping)));
 
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS * 2,
                              ht.buckets_size);
@@ -743,22 +751,23 @@ void test_hashtable_should_GrowTheBucketArrayWhenItFillsUp(void)
     {
         int out = 0;
 
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_get(&ht, &i, sizeof(i), &out,
-                                            sizeof(out)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_get(&ht, &i, sizeof(i), &out, sizeof(out)));
         TEST_ASSERT_EQUAL_INT(i, out);
     }
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_NotGrowWhenAValueIsOnlyReplaced(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     for (int i = 0; i < 12; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
 
     /* replacing values, over and over, never adds a pair, so the load factor
        does not move and neither does the array */
@@ -767,16 +776,16 @@ void test_hashtable_should_NotGrowWhenAValueIsOnlyReplaced(void)
         {
             const int value = i + round;
 
-            TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                                  hashtable_put(&ht, &i, sizeof(i), &value,
-                                                sizeof(value)));
+            TEST_ASSERT_EQUAL_INT(
+                COLLECTION_OK,
+                coll_hashtable_put(&ht, &i, sizeof(i), &value, sizeof(value)));
         }
 
     TEST_ASSERT_EQUAL_size_t(12, ht.size);
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS,
                              ht.buckets_size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RewindTheIterationOnPut(void)
@@ -788,14 +797,14 @@ void test_hashtable_should_RewindTheIterationOnPut(void)
 
     fill(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
     TEST_ASSERT_FALSE(ht.cursor_bucket == 0 && ht.cursor_pair == NULL);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &late.key, sizeof(late.key),
-                                        &late.value, sizeof(late.value)));
+                          coll_hashtable_put(&ht, &late.key, sizeof(late.key),
+                                             &late.value, sizeof(late.value)));
 
     /* a put can rehash everything, so the walk starts over rather than
        skipping or repeating pairs */
@@ -806,7 +815,7 @@ void test_hashtable_should_RewindTheIterationOnPut(void)
 
     assert_walk_yields(&ht, expected, 4);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- GET ---------------------------------------------------------------- */
@@ -822,16 +831,16 @@ void test_hashtable_should_CopyOutTheValueStoredUnderAKey(void)
         int out = 0;
 
         TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_get(&ht, &pairs[i].key,
-                                            sizeof(pairs[i].key), &out,
-                                            sizeof(out)));
+                              coll_hashtable_get(&ht, &pairs[i].key,
+                                                 sizeof(pairs[i].key), &out,
+                                                 sizeof(out)));
         TEST_ASSERT_EQUAL_INT(pairs[i].value, out);
     }
 
     /* getting is not taking: the table still holds everything */
     assert_contents(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_CopyOutExactlyTheStoredValue(void)
@@ -842,19 +851,19 @@ void test_hashtable_should_CopyOutExactlyTheStoredValue(void)
        value is worth would trample it */
     int       out[2] = { 0, 0x5A5A5A5A };
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &key, sizeof(key), &out[0],
-                                        sizeof(out[0])));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get(&ht, &key, sizeof(key), &out[0], sizeof(out[0])));
 
     TEST_ASSERT_EQUAL_HEX32(value, out[0]);
     TEST_ASSERT_EQUAL_HEX32(0x5A5A5A5A, out[1]);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_FindAKeyThatCollidesWithAnother(void)
@@ -863,14 +872,13 @@ void test_hashtable_should_FindAKeyThatCollidesWithAnother(void)
                                       { 4, 40 } };
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hash_always_zero, NULL));
+                          coll_hashtable_init(&ht, hash_always_zero, NULL));
 
     for (size_t i = 0; i < 4; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &pairs[i].key,
-                                            sizeof(pairs[i].key),
-                                            &pairs[i].value,
-                                            sizeof(pairs[i].value)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &pairs[i].key, sizeof(pairs[i].key),
+                               &pairs[i].value, sizeof(pairs[i].value)));
 
     /* every key is in the same chain, so a get has to walk past the wrong
        ones to reach the right one */
@@ -880,11 +888,11 @@ void test_hashtable_should_FindAKeyThatCollidesWithAnother(void)
     const int absent = 99;
     int       out    = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_get(&ht, &absent, sizeof(absent), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_get(&ht, &absent, sizeof(absent), &out, sizeof(out)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundForAKeyItDoesNotHold(void)
@@ -895,14 +903,14 @@ void test_hashtable_should_ReportNotfoundForAKeyItDoesNotHold(void)
 
     fill(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_get(&ht, &absent, sizeof(absent), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_get(&ht, &absent, sizeof(absent), &out, sizeof(out)));
 
     /* the destination was never written */
     TEST_ASSERT_EQUAL_INT(0x1234, out);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundWhenGettingFromAnEmptyTable(void)
@@ -910,16 +918,16 @@ void test_hashtable_should_ReportNotfoundWhenGettingFromAnEmptyTable(void)
     const int key = 1;
     int       out = 0x1234;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_get(&ht, &key, sizeof(key), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_get(&ht, &key, sizeof(key), &out, sizeof(out)));
 
     TEST_ASSERT_EQUAL_INT(0x1234, out);
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectAValueSizeThatDoesNotMatchOnGet(void)
@@ -932,9 +940,9 @@ void test_hashtable_should_RejectAValueSizeThatDoesNotMatchOnGet(void)
     fill(&ht, pairs, 2);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), &out,
-                                        sizeof(out)));
+                          coll_hashtable_get(&ht, &pairs[0].key,
+                                             sizeof(pairs[0].key), &out,
+                                             sizeof(out)));
 
     /* the destination was never written */
     TEST_ASSERT_EQUAL_HEX64(0, out);
@@ -943,12 +951,12 @@ void test_hashtable_should_RejectAValueSizeThatDoesNotMatchOnGet(void)
     int right = 0;
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), &right,
-                                        sizeof(right)));
+                          coll_hashtable_get(&ht, &pairs[0].key,
+                                             sizeof(pairs[0].key), &right,
+                                             sizeof(right)));
     TEST_ASSERT_EQUAL_INT(pairs[0].value, right);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectNullPointersOnGet(void)
@@ -959,24 +967,24 @@ void test_hashtable_should_RejectNullPointersOnGet(void)
     fill(&ht, pairs, 2);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get(NULL, &pairs[0].key,
-                                        sizeof(pairs[0].key), &out,
-                                        sizeof(out)));
+                          coll_hashtable_get(NULL, &pairs[0].key,
+                                             sizeof(pairs[0].key), &out,
+                                             sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_get(&ht, NULL, sizeof(pairs[0].key), &out, sizeof(out)));
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get(&ht, NULL, sizeof(pairs[0].key), &out,
-                                        sizeof(out)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), NULL,
-                                        sizeof(out)));
+                          coll_hashtable_get(&ht, &pairs[0].key,
+                                             sizeof(pairs[0].key), NULL,
+                                             sizeof(out)));
     /* the sizes are irrelevant: a null pointer is reported before EINVAL */
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get(&ht, NULL, 0, NULL, 0));
+                          coll_hashtable_get(&ht, NULL, 0, NULL, 0));
 
     TEST_ASSERT_EQUAL_INT(0x1234, out);
     assert_contents(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectAZeroSizeOnGet(void)
@@ -986,17 +994,17 @@ void test_hashtable_should_RejectAZeroSizeOnGet(void)
 
     fill(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get(&ht, &pairs[0].key, 0, &out,
-                                        sizeof(out)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), &out, 0));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_get(&ht, &pairs[0].key, 0, &out, sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_get(&ht, &pairs[0].key, sizeof(pairs[0].key), &out, 0));
 
     TEST_ASSERT_EQUAL_INT(0x1234, out);
     assert_contents(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- GET_VALUE_SIZE ----------------------------------------------------- */
@@ -1007,24 +1015,23 @@ void test_hashtable_should_ReportTheSizeAValueWasStoredWith(void)
     const long long value = 0x0BADF00DCAFEBABEll;
     size_t          size  = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_value_size(&ht, &key, sizeof(key),
-                                                   &size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_get_value_size(
+                                             &ht, &key, sizeof(key), &size));
     TEST_ASSERT_EQUAL_size_t(sizeof(value), size);
 
     /* which is exactly what a get sized by it needs */
     long long out = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, &key, sizeof(key), &out, size));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK, coll_hashtable_get(&ht, &key, sizeof(key), &out, size));
     TEST_ASSERT_EQUAL_HEX64(value, out);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundWhenSizingAValueItDoesNotHold(void)
@@ -1035,14 +1042,14 @@ void test_hashtable_should_ReportNotfoundWhenSizingAValueItDoesNotHold(void)
 
     fill(&ht, pairs, 1);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_get_value_size(&ht, &absent,
-                                                   sizeof(absent), &size));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_get_value_size(&ht, &absent, sizeof(absent), &size));
 
     /* the out parameter was never written */
     TEST_ASSERT_EQUAL_size_t(0x1234, size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectBadArgumentsOnGetValueSize(void)
@@ -1052,25 +1059,21 @@ void test_hashtable_should_RejectBadArgumentsOnGetValueSize(void)
 
     fill(&ht, pairs, 1);
 
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, coll_hashtable_get_value_size(
+                                                NULL, &pairs[0].key,
+                                                sizeof(pairs[0].key), &size));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_get_value_size(&ht, NULL, sizeof(pairs[0].key), &size));
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get_value_size(NULL, &pairs[0].key,
-                                                   sizeof(pairs[0].key),
-                                                   &size));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get_value_size(&ht, NULL,
-                                                   sizeof(pairs[0].key),
-                                                   &size));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get_value_size(&ht, &pairs[0].key,
-                                                   sizeof(pairs[0].key),
-                                                   NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get_value_size(&ht, &pairs[0].key, 0,
-                                                   &size));
+                          coll_hashtable_get_value_size(
+                              &ht, &pairs[0].key, sizeof(pairs[0].key), NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL, coll_hashtable_get_value_size(
+                                                 &ht, &pairs[0].key, 0, &size));
 
     TEST_ASSERT_EQUAL_size_t(0x1234, size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- CONTAINS ----------------------------------------------------------- */
@@ -1083,27 +1086,27 @@ void test_hashtable_should_ReportContainsOnlyForKeysItHolds(void)
 
     fill(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_contains(&ht, &pairs[0].key,
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_contains(
+                                             &ht, &pairs[0].key,
                                              sizeof(pairs[0].key), &contains));
     TEST_ASSERT_TRUE(contains);
 
     /* a key that is not there is an answer, not a failure */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_contains(&ht, &absent, sizeof(absent),
-                                             &contains));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_contains(&ht, &absent, sizeof(absent), &contains));
     TEST_ASSERT_FALSE(contains);
 
     /* and it follows a remove */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_remove(&ht, &pairs[0].key,
-                                           sizeof(pairs[0].key)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_contains(&ht, &pairs[0].key,
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_remove(&ht, &pairs[0].key, sizeof(pairs[0].key)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_contains(
+                                             &ht, &pairs[0].key,
                                              sizeof(pairs[0].key), &contains));
     TEST_ASSERT_FALSE(contains);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotContainsOnAnEmptyTable(void)
@@ -1111,16 +1114,16 @@ void test_hashtable_should_ReportNotContainsOnAnEmptyTable(void)
     const int key      = 1;
     bool      contains = true;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_contains(&ht, &key, sizeof(key),
-                                             &contains));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_contains(&ht, &key, sizeof(key), &contains));
     TEST_ASSERT_FALSE(contains);
 
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectBadArgumentsOnContains(void)
@@ -1131,22 +1134,23 @@ void test_hashtable_should_RejectBadArgumentsOnContains(void)
     fill(&ht, pairs, 1);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_contains(NULL, &pairs[0].key,
-                                             sizeof(pairs[0].key), &contains));
+                          coll_hashtable_contains(NULL, &pairs[0].key,
+                                                  sizeof(pairs[0].key),
+                                                  &contains));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_contains(&ht, NULL, sizeof(pairs[0].key), &contains));
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_contains(&ht, NULL,
-                                             sizeof(pairs[0].key), &contains));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_contains(&ht, &pairs[0].key,
-                                             sizeof(pairs[0].key), NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_contains(&ht, &pairs[0].key, 0,
-                                             &contains));
+                          coll_hashtable_contains(&ht, &pairs[0].key,
+                                                  sizeof(pairs[0].key), NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_contains(&ht, &pairs[0].key, 0, &contains));
 
     /* the out parameter was never written */
     TEST_ASSERT_TRUE(contains);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- REMOVE ------------------------------------------------------------- */
@@ -1158,14 +1162,14 @@ void test_hashtable_should_RemoveThePairStoredUnderAKey(void)
 
     fill(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_remove(&ht, &pairs[1].key,
-                                           sizeof(pairs[1].key)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_remove(&ht, &pairs[1].key, sizeof(pairs[1].key)));
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_get(&ht, &pairs[1].key,
-                                        sizeof(pairs[1].key), &out,
-                                        sizeof(out)));
+                          coll_hashtable_get(&ht, &pairs[1].key,
+                                             sizeof(pairs[1].key), &out,
+                                             sizeof(out)));
     TEST_ASSERT_EQUAL_INT(0x1234, out);
 
     /* the pairs around it were left alone */
@@ -1173,7 +1177,7 @@ void test_hashtable_should_RemoveThePairStoredUnderAKey(void)
 
     assert_contents(&ht, left, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RelinkTheChainWhereverThePairSatInIt(void)
@@ -1185,18 +1189,17 @@ void test_hashtable_should_RelinkTheChainWhereverThePairSatInIt(void)
     for (size_t target = 0; target < 3; target++)
     {
         TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_init(&ht, hash_always_zero, NULL));
+                              coll_hashtable_init(&ht, hash_always_zero, NULL));
 
         for (size_t i = 0; i < 3; i++)
-            TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                                  hashtable_put(&ht, &pairs[i].key,
-                                                sizeof(pairs[i].key),
-                                                &pairs[i].value,
-                                                sizeof(pairs[i].value)));
+            TEST_ASSERT_EQUAL_INT(
+                COLLECTION_OK,
+                coll_hashtable_put(&ht, &pairs[i].key, sizeof(pairs[i].key),
+                                   &pairs[i].value, sizeof(pairs[i].value)));
 
         TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_remove(&ht, &pairs[target].key,
-                                               sizeof(pairs[target].key)));
+                              coll_hashtable_remove(&ht, &pairs[target].key,
+                                                    sizeof(pairs[target].key)));
 
         TEST_ASSERT_EQUAL_size_t(2, chain_length(&ht, 0));
         TEST_ASSERT_EQUAL_size_t(2, ht.size);
@@ -1211,20 +1214,20 @@ void test_hashtable_should_RelinkTheChainWhereverThePairSatInIt(void)
             if (i == target)
             {
                 TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                                      hashtable_get(&ht, &pairs[i].key,
-                                                    sizeof(pairs[i].key),
-                                                    &out, sizeof(out)));
+                                      coll_hashtable_get(&ht, &pairs[i].key,
+                                                         sizeof(pairs[i].key),
+                                                         &out, sizeof(out)));
                 continue;
             }
 
             TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                                  hashtable_get(&ht, &pairs[i].key,
-                                                sizeof(pairs[i].key), &out,
-                                                sizeof(out)));
+                                  coll_hashtable_get(&ht, &pairs[i].key,
+                                                     sizeof(pairs[i].key), &out,
+                                                     sizeof(out)));
             TEST_ASSERT_EQUAL_INT(pairs[i].value, out);
         }
 
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+        TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
     }
 }
 
@@ -1234,13 +1237,13 @@ void test_hashtable_should_ClearTheBucketWhenItsLastPairIsRemoved(void)
     const int value = 10;
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hash_always_zero, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
+                          coll_hashtable_init(&ht, hash_always_zero, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_remove(&ht, &key, sizeof(key)));
+                          coll_hashtable_remove(&ht, &key, sizeof(key)));
 
     /* a stale head would be dereferenced by the next lookup in this bucket */
     TEST_ASSERT_NULL(ht.buckets[0]);
@@ -1248,12 +1251,12 @@ void test_hashtable_should_ClearTheBucketWhenItsLastPairIsRemoved(void)
     assert_bookkeeping(&ht);
 
     /* and the table takes pairs again */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
     TEST_ASSERT_EQUAL_size_t(1, chain_length(&ht, 0));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundWhenRemovingAKeyItDoesNotHold(void)
@@ -1264,26 +1267,26 @@ void test_hashtable_should_ReportNotfoundWhenRemovingAKeyItDoesNotHold(void)
     fill(&ht, pairs, 2);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_remove(&ht, &absent, sizeof(absent)));
+                          coll_hashtable_remove(&ht, &absent, sizeof(absent)));
 
     /* a failed remove takes nothing with it */
     assert_contents(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundWhenRemovingFromAnEmptyTable(void)
 {
     const int key = 1;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_remove(&ht, &key, sizeof(key)));
+                          coll_hashtable_remove(&ht, &key, sizeof(key)));
 
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectBadArgumentsOnRemove(void)
@@ -1292,28 +1295,31 @@ void test_hashtable_should_RejectBadArgumentsOnRemove(void)
 
     fill(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_remove(NULL, &pairs[0].key,
-                                           sizeof(pairs[0].key)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_remove(&ht, NULL, sizeof(pairs[0].key)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_remove(NULL, &pairs[0].key, sizeof(pairs[0].key)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_remove(&ht, NULL, sizeof(pairs[0].key)));
     /* the size is irrelevant: a null pointer is reported before EINVAL */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_remove(&ht, NULL, 0));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
+                          coll_hashtable_remove(&ht, NULL, 0));
     TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_remove(&ht, &pairs[0].key, 0));
+                          coll_hashtable_remove(&ht, &pairs[0].key, 0));
 
     assert_contents(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ShrinkTheBucketArrayAsItEmpties(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     for (int i = 0; i < 13; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
 
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS * 2,
                              ht.buckets_size);
@@ -1323,7 +1329,7 @@ void test_hashtable_should_ShrinkTheBucketArrayAsItEmpties(void)
        what keeps a table hovering at a threshold from resizing on every call */
     for (int i = 0; i < 5; i++)
         TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_remove(&ht, &i, sizeof(i)));
+                              coll_hashtable_remove(&ht, &i, sizeof(i)));
 
     TEST_ASSERT_EQUAL_size_t(8, ht.size);
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS * 2,
@@ -1331,8 +1337,8 @@ void test_hashtable_should_ShrinkTheBucketArrayAsItEmpties(void)
 
     const int tipping = 5;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_remove(&ht, &tipping, sizeof(tipping)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK, coll_hashtable_remove(&ht, &tipping, sizeof(tipping)));
 
     TEST_ASSERT_EQUAL_size_t(COLLECTION_HASHTABLE_INITIAL_BUCKETS,
                              ht.buckets_size);
@@ -1345,31 +1351,32 @@ void test_hashtable_should_ShrinkTheBucketArrayAsItEmpties(void)
     {
         int out = 0;
 
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_get(&ht, &i, sizeof(i), &out,
-                                            sizeof(out)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_get(&ht, &i, sizeof(i), &out, sizeof(out)));
         TEST_ASSERT_EQUAL_INT(i, out);
     }
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_NeverShrinkBelowTheInitialBucketCount(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+
+    for (int i = 0; i < 20; i++)
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
 
     for (int i = 0; i < 20; i++)
         TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &i, sizeof(i), &i, sizeof(i)));
-
-    for (int i = 0; i < 20; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_remove(&ht, &i, sizeof(i)));
+                              coll_hashtable_remove(&ht, &i, sizeof(i)));
 
     /* emptied all the way down, and still holding the floor */
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RewindTheIterationOnRemove(void)
@@ -1380,14 +1387,14 @@ void test_hashtable_should_RewindTheIterationOnRemove(void)
 
     fill(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
     TEST_ASSERT_FALSE(ht.cursor_bucket == 0 && ht.cursor_pair == NULL);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_remove(&ht, &pairs[0].key,
-                                           sizeof(pairs[0].key)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_remove(&ht, &pairs[0].key, sizeof(pairs[0].key)));
 
     /* the cursor could have been sitting on the pair that was just freed */
     assert_at_start(&ht);
@@ -1396,7 +1403,7 @@ void test_hashtable_should_RewindTheIterationOnRemove(void)
 
     assert_walk_yields(&ht, left, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_LeaveTheIterationAloneWhenARemoveFindsNothing(void)
@@ -1408,21 +1415,22 @@ void test_hashtable_should_LeaveTheIterationAloneWhenARemoveFindsNothing(void)
 
     fill(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
 
     const size_t                 bucket_before = ht.cursor_bucket;
-    const struct hashtable_pair *pair_before   = ht.cursor_pair;
+    const struct coll_hashtable_pair *pair_before = ht.cursor_pair;
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_remove(&ht, &absent, sizeof(absent)));
+                          coll_hashtable_remove(&ht, &absent, sizeof(absent)));
 
-    /* a call that changed nothing has no reason to disturb a walk in progress */
+    /* a call that changed nothing has no reason to disturb a walk in progress
+       */
     TEST_ASSERT_EQUAL_size_t(bucket_before, ht.cursor_bucket);
     TEST_ASSERT_EQUAL_PTR(pair_before, ht.cursor_pair);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- GET_PAIR ----------------------------------------------------------- */
@@ -1439,7 +1447,7 @@ void test_hashtable_should_HandBackEveryPairExactlyOnce(void)
     /* the pairs were copied out, not taken out */
     assert_contents(&ht, pairs, 5);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_WalkAWholeChainOfCollidingPairs(void)
@@ -1448,38 +1456,36 @@ void test_hashtable_should_WalkAWholeChainOfCollidingPairs(void)
                                       { 4, 40 } };
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hash_always_zero, NULL));
+                          coll_hashtable_init(&ht, hash_always_zero, NULL));
 
     for (size_t i = 0; i < 4; i++)
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &pairs[i].key,
-                                            sizeof(pairs[i].key),
-                                            &pairs[i].value,
-                                            sizeof(pairs[i].value)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &pairs[i].key, sizeof(pairs[i].key),
+                               &pairs[i].value, sizeof(pairs[i].value)));
 
     /* everything sits in one bucket, so the walk has to follow a chain
        rather than only step from bucket to bucket */
     assert_walk_yields(&ht, pairs, 4);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_WalkATableThatHasGrown(void)
 {
     struct int_pair pairs[40];
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     for (int i = 0; i < 40; i++)
     {
         pairs[i].key   = i;
         pairs[i].value = i * 10;
 
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &pairs[i].key,
-                                            sizeof(pairs[i].key),
-                                            &pairs[i].value,
-                                            sizeof(pairs[i].value)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &pairs[i].key, sizeof(pairs[i].key),
+                               &pairs[i].value, sizeof(pairs[i].value)));
     }
 
     /* several resizes in, the walk still reaches every pair once: no bucket
@@ -1487,7 +1493,7 @@ void test_hashtable_should_WalkATableThatHasGrown(void)
     TEST_ASSERT_TRUE(ht.buckets_size > COLLECTION_HASHTABLE_INITIAL_BUCKETS);
     assert_walk_yields(&ht, pairs, 40);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundWhenWalkingAnEmptyTable(void)
@@ -1495,18 +1501,18 @@ void test_hashtable_should_ReportNotfoundWhenWalkingAnEmptyTable(void)
     int key   = 0x1234;
     int value = 0x5678;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
 
     /* neither destination was written */
     TEST_ASSERT_EQUAL_INT(0x1234, key);
     TEST_ASSERT_EQUAL_INT(0x5678, value);
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_StartOverAfterARewind(void)
@@ -1519,25 +1525,25 @@ void test_hashtable_should_StartOverAfterARewind(void)
 
     fill(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &first_key,
-                                             sizeof(first_key), &first_value,
-                                             sizeof(first_value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &first_key, sizeof(first_key),
+                                &first_value, sizeof(first_value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_rewind(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_rewind(&ht));
     assert_at_start(&ht);
 
     /* the same table, unchanged, walks in the same order again */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
     TEST_ASSERT_EQUAL_INT(first_key, key);
     TEST_ASSERT_EQUAL_INT(first_value, value);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RewindATableItNeverWalked(void)
@@ -1547,16 +1553,16 @@ void test_hashtable_should_RewindATableItNeverWalked(void)
     fill(&ht, pairs, 1);
 
     /* already at the start, and asked to go there anyway */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_rewind(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_rewind(&ht));
     assert_at_start(&ht);
     assert_contents(&ht, pairs, 1);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectANullTablePointerOnRewind(void)
 {
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_rewind(NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, coll_hashtable_rewind(NULL));
 }
 
 void test_hashtable_should_NotAdvanceTheCursorWhenAPairDoesNotFit(void)
@@ -1571,13 +1577,13 @@ void test_hashtable_should_NotAdvanceTheCursorWhenAPairDoesNotFit(void)
     fill(&ht, pairs, 3);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get_pair(&ht, &wide, sizeof(wide), &value,
-                                             sizeof(value)));
+                          coll_hashtable_get_pair(&ht, &wide, sizeof(wide),
+                                                  &value, sizeof(value)));
     assert_at_start(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &wide,
-                                             sizeof(wide)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &wide, sizeof(wide)));
     assert_at_start(&ht);
 
     /* nothing was written and nothing was skipped, so the whole table is
@@ -1585,7 +1591,7 @@ void test_hashtable_should_NotAdvanceTheCursorWhenAPairDoesNotFit(void)
     TEST_ASSERT_EQUAL_HEX64(0, wide);
     assert_walk_yields(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectBadArgumentsOnGetPairWithoutAdvancing(void)
@@ -1597,27 +1603,27 @@ void test_hashtable_should_RejectBadArgumentsOnGetPairWithoutAdvancing(void)
     fill(&ht, pairs, 2);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get_pair(NULL, &key, sizeof(key), &value,
-                                             sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get_pair(&ht, NULL, sizeof(key), &value,
-                                             sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_get_pair(&ht, &key, sizeof(key), NULL,
-                                             sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get_pair(&ht, &key, 0, &value,
-                                             sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_EINVAL,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             0));
+                          coll_hashtable_get_pair(NULL, &key, sizeof(key),
+                                                  &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_get_pair(&ht, NULL, sizeof(key), &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENULL,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), NULL, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_get_pair(&ht, &key, 0, &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_EINVAL,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, 0));
 
     TEST_ASSERT_EQUAL_INT(0x1234, key);
     TEST_ASSERT_EQUAL_INT(0x5678, value);
     assert_at_start(&ht);
     assert_walk_yields(&ht, pairs, 2);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_WalkPairsOfDifferentSizesWithTheSizesItReports(void)
@@ -1628,13 +1634,13 @@ void test_hashtable_should_WalkPairsOfDifferentSizesWithTheSizesItReports(void)
     const long long big_value   = 0x1122334455667788ll;
     size_t          walked      = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK, coll_hashtable_put(&ht, &small_key, sizeof(small_key),
+                                          &small_value, sizeof(small_value)));
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &small_key, sizeof(small_key),
-                                        &small_value, sizeof(small_value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &big_key, sizeof(big_key),
-                                        &big_value, sizeof(big_value)));
+                          coll_hashtable_put(&ht, &big_key, sizeof(big_key),
+                                             &big_value, sizeof(big_value)));
 
     /* the caller knows neither which pair comes first nor how wide it is, so
        it asks before every step */
@@ -1643,16 +1649,16 @@ void test_hashtable_should_WalkPairsOfDifferentSizesWithTheSizesItReports(void)
         size_t key_size   = 0;
         size_t value_size = 0;
 
-        if (hashtable_peek_pair_size(&ht, &key_size, &value_size) ==
+        if (coll_hashtable_peek_pair_size(&ht, &key_size, &value_size) ==
             COLLECTION_ENOTFOUND)
             break;
 
         long long key   = 0;
         long long value = 0;
 
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_get_pair(&ht, &key, key_size, &value,
-                                                 value_size));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_get_pair(&ht, &key, key_size, &value, value_size));
 
         if (key_size == sizeof(small_key))
         {
@@ -1673,7 +1679,7 @@ void test_hashtable_should_WalkPairsOfDifferentSizesWithTheSizesItReports(void)
 
     TEST_ASSERT_EQUAL_size_t(2, walked);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- PEEK_PAIR_SIZE ----------------------------------------------------- */
@@ -1683,17 +1689,16 @@ void test_hashtable_should_ReportTheSizesOfTheNextPairWithoutAdvancing(void)
     const long long key   = 0x0BADF00DCAFEBABEll;
     const int       value = 10;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
 
     size_t key_size   = 0;
     size_t value_size = 0;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_peek_pair_size(&ht, &key_size,
-                                                   &value_size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_peek_pair_size(
+                                             &ht, &key_size, &value_size));
     TEST_ASSERT_EQUAL_size_t(sizeof(key), key_size);
     TEST_ASSERT_EQUAL_size_t(sizeof(value), value_size);
 
@@ -1701,9 +1706,8 @@ void test_hashtable_should_ReportTheSizesOfTheNextPairWithoutAdvancing(void)
     assert_at_start(&ht);
     key_size   = 0;
     value_size = 0;
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_peek_pair_size(&ht, &key_size,
-                                                   &value_size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_peek_pair_size(
+                                             &ht, &key_size, &value_size));
     TEST_ASSERT_EQUAL_size_t(sizeof(key), key_size);
     TEST_ASSERT_EQUAL_size_t(sizeof(value), value_size);
 
@@ -1712,12 +1716,12 @@ void test_hashtable_should_ReportTheSizesOfTheNextPairWithoutAdvancing(void)
     int       out_value = 0;
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &out_key, key_size,
-                                             &out_value, value_size));
+                          coll_hashtable_get_pair(&ht, &out_key, key_size,
+                                                  &out_value, value_size));
     TEST_ASSERT_EQUAL_HEX64(key, out_key);
     TEST_ASSERT_EQUAL_INT(value, out_value);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundWhenPeekingPastTheLastPair(void)
@@ -1730,19 +1734,19 @@ void test_hashtable_should_ReportNotfoundWhenPeekingPastTheLastPair(void)
 
     fill(&ht, pairs, 1);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get_pair(&ht, &key, sizeof(key), &value,
-                                             sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get_pair(&ht, &key, sizeof(key), &value, sizeof(value)));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_peek_pair_size(&ht, &key_size,
-                                                   &value_size));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_peek_pair_size(&ht, &key_size, &value_size));
 
     /* the out parameters were never written */
     TEST_ASSERT_EQUAL_size_t(0x1234, key_size);
     TEST_ASSERT_EQUAL_size_t(0x5678, value_size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_ReportNotfoundWhenPeekingAnEmptyTable(void)
@@ -1750,17 +1754,17 @@ void test_hashtable_should_ReportNotfoundWhenPeekingAnEmptyTable(void)
     size_t key_size   = 0x1234;
     size_t value_size = 0x5678;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENOTFOUND,
-                          hashtable_peek_pair_size(&ht, &key_size,
-                                                   &value_size));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_ENOTFOUND,
+        coll_hashtable_peek_pair_size(&ht, &key_size, &value_size));
 
     TEST_ASSERT_EQUAL_size_t(0x1234, key_size);
     TEST_ASSERT_EQUAL_size_t(0x5678, value_size);
     assert_empty(&ht);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectNullPointersOnPeekPairSize(void)
@@ -1771,18 +1775,17 @@ void test_hashtable_should_RejectNullPointersOnPeekPairSize(void)
 
     fill(&ht, pairs, 1);
 
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, coll_hashtable_peek_pair_size(
+                                                NULL, &key_size, &value_size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, coll_hashtable_peek_pair_size(
+                                                &ht, NULL, &value_size));
     TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_peek_pair_size(NULL, &key_size,
-                                                   &value_size));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_peek_pair_size(&ht, NULL, &value_size));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
-                          hashtable_peek_pair_size(&ht, &key_size, NULL));
+                          coll_hashtable_peek_pair_size(&ht, &key_size, NULL));
 
     TEST_ASSERT_EQUAL_size_t(0x1234, key_size);
     TEST_ASSERT_EQUAL_size_t(0x5678, value_size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- GET_SIZE ----------------------------------------------------------- */
@@ -1792,35 +1795,35 @@ void test_hashtable_should_ReportTheNumberOfPairsItHolds(void)
     const struct int_pair pairs[] = { { 1, 10 }, { 2, 20 }, { 3, 30 } };
     size_t                size    = 0x1234;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_get_size(&ht, &size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_get_size(&ht, &size));
     TEST_ASSERT_EQUAL_size_t(0, size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
     fill(&ht, pairs, 3);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_get_size(&ht, &size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_get_size(&ht, &size));
     TEST_ASSERT_EQUAL_size_t(3, size);
 
     /* a replaced value is not a new pair */
     const int again = 99;
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &pairs[0].key,
-                                        sizeof(pairs[0].key), &again,
-                                        sizeof(again)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_get_size(&ht, &size));
+                          coll_hashtable_put(&ht, &pairs[0].key,
+                                             sizeof(pairs[0].key), &again,
+                                             sizeof(again)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_get_size(&ht, &size));
     TEST_ASSERT_EQUAL_size_t(3, size);
 
     /* and it follows the table down as well as up */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_remove(&ht, &pairs[0].key,
-                                           sizeof(pairs[0].key)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_get_size(&ht, &size));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_remove(&ht, &pairs[0].key, sizeof(pairs[0].key)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_get_size(&ht, &size));
     TEST_ASSERT_EQUAL_size_t(2, size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_get_size(&ht, &size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_get_size(&ht, &size));
     TEST_ASSERT_EQUAL_size_t(0, size);
 }
 
@@ -1831,13 +1834,14 @@ void test_hashtable_should_RejectNullPointersOnGetSize(void)
 
     fill(&ht, pairs, 1);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_get_size(NULL, &size));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_get_size(&ht, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
+                          coll_hashtable_get_size(NULL, &size));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, coll_hashtable_get_size(&ht, NULL));
 
     /* the out parameter was never written */
     TEST_ASSERT_EQUAL_size_t(0x1234, size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- IS_EMPTY ----------------------------------------------------------- */
@@ -1848,22 +1852,22 @@ void test_hashtable_should_ReportEmptyOnlyWhileItHoldsNoPairs(void)
     const int value = 10;
     bool      empty = false;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_is_empty(&ht, &empty));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_is_empty(&ht, &empty));
     TEST_ASSERT_TRUE(empty);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, &key, sizeof(key), &value,
-                                        sizeof(value)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_is_empty(&ht, &empty));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, &key, sizeof(key), &value, sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_is_empty(&ht, &empty));
     TEST_ASSERT_FALSE(empty);
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_remove(&ht, &key, sizeof(key)));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_is_empty(&ht, &empty));
+                          coll_hashtable_remove(&ht, &key, sizeof(key)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_is_empty(&ht, &empty));
     TEST_ASSERT_TRUE(empty);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_RejectNullPointersOnIsEmpty(void)
@@ -1873,13 +1877,14 @@ void test_hashtable_should_RejectNullPointersOnIsEmpty(void)
 
     fill(&ht, pairs, 1);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_is_empty(NULL, &empty));
-    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, hashtable_is_empty(&ht, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL,
+                          coll_hashtable_is_empty(NULL, &empty));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, coll_hashtable_is_empty(&ht, NULL));
 
     /* the out parameter was never written */
     TEST_ASSERT_TRUE(empty);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- HASH_BYTES --------------------------------------------------------- */
@@ -1890,12 +1895,13 @@ void test_hashtable_should_HashTheSameBytesToTheSameValue(void)
     const int second = 0x0BADF00D;
 
     /* two objects, same bytes: the hash is of the contents, not the address */
-    TEST_ASSERT_EQUAL_size_t(hashtable_hash_bytes(&first, sizeof(first)),
-                             hashtable_hash_bytes(&second, sizeof(second)));
+    TEST_ASSERT_EQUAL_size_t(
+        coll_hashtable_hash_bytes(&first, sizeof(first)),
+        coll_hashtable_hash_bytes(&second, sizeof(second)));
 
     /* and it is stable across calls */
-    TEST_ASSERT_EQUAL_size_t(hashtable_hash_bytes(&first, sizeof(first)),
-                             hashtable_hash_bytes(&first, sizeof(first)));
+    TEST_ASSERT_EQUAL_size_t(coll_hashtable_hash_bytes(&first, sizeof(first)),
+                             coll_hashtable_hash_bytes(&first, sizeof(first)));
 }
 
 void test_hashtable_should_HashTheSameBytesUnderDifferentSizesDifferently(void)
@@ -1903,8 +1909,9 @@ void test_hashtable_should_HashTheSameBytesUnderDifferentSizesDifferently(void)
     const uint32_t value = 0;
 
     /* one byte of it against four: a key is its bytes and how many of them */
-    TEST_ASSERT_NOT_EQUAL_size_t(hashtable_hash_bytes(&value, 1),
-                                 hashtable_hash_bytes(&value, sizeof(value)));
+    TEST_ASSERT_NOT_EQUAL_size_t(
+        coll_hashtable_hash_bytes(&value, 1),
+        coll_hashtable_hash_bytes(&value, sizeof(value)));
 }
 
 void test_hashtable_should_HashNothingToZero(void)
@@ -1913,10 +1920,11 @@ void test_hashtable_should_HashNothingToZero(void)
 
     /* a key that is not there at all, rather than one that happens to hash
        to something */
-    TEST_ASSERT_EQUAL_size_t(0, hashtable_hash_bytes(NULL, sizeof(value)));
-    TEST_ASSERT_EQUAL_size_t(0, hashtable_hash_bytes(&value, 0));
-    TEST_ASSERT_EQUAL_size_t(0, hashtable_hash_string(NULL, sizeof(value)));
-    TEST_ASSERT_EQUAL_size_t(0, hashtable_hash_string(&value, 0));
+    TEST_ASSERT_EQUAL_size_t(0, coll_hashtable_hash_bytes(NULL, sizeof(value)));
+    TEST_ASSERT_EQUAL_size_t(0, coll_hashtable_hash_bytes(&value, 0));
+    TEST_ASSERT_EQUAL_size_t(0,
+                             coll_hashtable_hash_string(NULL, sizeof(value)));
+    TEST_ASSERT_EQUAL_size_t(0, coll_hashtable_hash_string(&value, 0));
 }
 
 void test_hashtable_should_ScatterKeysThatDifferByOneBit(void)
@@ -1930,9 +1938,9 @@ void test_hashtable_should_ScatterKeysThatDifferByOneBit(void)
     {
         const uint32_t flipped = base ^ (1u << bit);
 
-        TEST_ASSERT_NOT_EQUAL_size_t(hashtable_hash_bytes(&base, sizeof(base)),
-                                     hashtable_hash_bytes(&flipped,
-                                                          sizeof(flipped)));
+        TEST_ASSERT_NOT_EQUAL_size_t(
+            coll_hashtable_hash_bytes(&base, sizeof(base)),
+            coll_hashtable_hash_bytes(&flipped, sizeof(flipped)));
     }
 }
 
@@ -1947,7 +1955,7 @@ void test_hashtable_should_SpreadConsecutiveIntegersAcrossBuckets(void)
     memset(counts, 0, sizeof(counts));
 
     for (int i = 0; i < KEYS; i++)
-        counts[hashtable_hash_bytes(&i, sizeof(i)) & (BUCKETS - 1)]++;
+        counts[coll_hashtable_hash_bytes(&i, sizeof(i)) & (BUCKETS - 1)]++;
 
     size_t used    = 0;
     size_t longest = 0;
@@ -1981,7 +1989,7 @@ void test_hashtable_should_SpreadKeysWhoseLowBitsAreAlwaysZero(void)
     {
         const int key = i * 16;
 
-        counts[hashtable_hash_bytes(&key, sizeof(key)) & (BUCKETS - 1)]++;
+        counts[coll_hashtable_hash_bytes(&key, sizeof(key)) & (BUCKETS - 1)]++;
     }
 
     size_t used = 0;
@@ -2007,7 +2015,7 @@ void test_hashtable_should_SpreadStringsAcrossBuckets(void)
         char key[32];
 
         snprintf(key, sizeof(key), "collection/key/%d", i);
-        counts[hashtable_hash_string(key, sizeof(key)) & (BUCKETS - 1)]++;
+        counts[coll_hashtable_hash_string(key, sizeof(key)) & (BUCKETS - 1)]++;
     }
 
     size_t used    = 0;
@@ -2031,15 +2039,17 @@ void test_hashtable_should_HashAStringTheSameWithOrWithoutItsTerminator(void)
 
     /* which is the whole reason this hash exists: strlen() and strlen() + 1
        have to agree, or a key stored one way is never found the other */
-    TEST_ASSERT_EQUAL_size_t(hashtable_hash_string(text, strlen(text)),
-                             hashtable_hash_string(text, strlen(text) + 1));
+    TEST_ASSERT_EQUAL_size_t(
+        coll_hashtable_hash_string(text, strlen(text)),
+        coll_hashtable_hash_string(text, strlen(text) + 1));
 
     /* trailing garbage past the NUL is not part of the key either */
     const char padded[] = { 'c', 'o', 'l', 'l', 'e', 'c', 't', 'i', 'o', 'n',
                             '\0', 'X', 'Y', 'Z' };
 
-    TEST_ASSERT_EQUAL_size_t(hashtable_hash_string(text, strlen(text)),
-                             hashtable_hash_string(padded, sizeof(padded)));
+    TEST_ASSERT_EQUAL_size_t(
+        coll_hashtable_hash_string(text, strlen(text)),
+        coll_hashtable_hash_string(padded, sizeof(padded)));
 }
 
 void test_hashtable_should_StopHashingAStringAtTheSizeItWasGiven(void)
@@ -2050,13 +2060,13 @@ void test_hashtable_should_StopHashingAStringAtTheSizeItWasGiven(void)
        past the size is read */
     const char unterminated[3] = { 'c', 'o', 'l' };
 
-    TEST_ASSERT_EQUAL_size_t(hashtable_hash_string("col", 3),
-                             hashtable_hash_string(unterminated,
-                                                   sizeof(unterminated)));
+    TEST_ASSERT_EQUAL_size_t(
+        coll_hashtable_hash_string("col", 3),
+        coll_hashtable_hash_string(unterminated, sizeof(unterminated)));
 
     /* and cutting a longer string short really does change the key */
-    TEST_ASSERT_NOT_EQUAL_size_t(hashtable_hash_string(text, sizeof(text)),
-                                 hashtable_hash_string(text, 3));
+    TEST_ASSERT_NOT_EQUAL_size_t(coll_hashtable_hash_string(text, sizeof(text)),
+                                 coll_hashtable_hash_string(text, 3));
 }
 
 void test_hashtable_should_HashDifferentStringsDifferently(void)
@@ -2065,12 +2075,13 @@ void test_hashtable_should_HashDifferentStringsDifferently(void)
     const char *second = "collectioo";
     const char *third  = "noitcelloc";
 
-    TEST_ASSERT_NOT_EQUAL_size_t(hashtable_hash_string(first, strlen(first)),
-                                 hashtable_hash_string(second,
-                                                       strlen(second)));
+    TEST_ASSERT_NOT_EQUAL_size_t(
+        coll_hashtable_hash_string(first, strlen(first)),
+        coll_hashtable_hash_string(second, strlen(second)));
     /* the same bytes in another order are another key: order has to matter */
-    TEST_ASSERT_NOT_EQUAL_size_t(hashtable_hash_string(first, strlen(first)),
-                                 hashtable_hash_string(third, strlen(third)));
+    TEST_ASSERT_NOT_EQUAL_size_t(
+        coll_hashtable_hash_string(first, strlen(first)),
+        coll_hashtable_hash_string(third, strlen(third)));
 }
 
 /* -- CMP_BYTES ---------------------------------------------------------- */
@@ -2080,8 +2091,8 @@ void test_hashtable_should_CallEqualBytesOfEqualSizeTheSameKey(void)
     const int first  = 0x0BADF00D;
     const int second = 0x0BADF00D;
 
-    TEST_ASSERT_EQUAL_INT(0, hashtable_cmp_bytes(&first, sizeof(first),
-                                                 &second, sizeof(second)));
+    TEST_ASSERT_EQUAL_INT(0, coll_hashtable_cmp_bytes(&first, sizeof(first),
+                                                      &second, sizeof(second)));
 }
 
 void test_hashtable_should_CallDifferentBytesDifferentKeys(void)
@@ -2089,9 +2100,9 @@ void test_hashtable_should_CallDifferentBytesDifferentKeys(void)
     const int first  = 1;
     const int second = 2;
 
-    TEST_ASSERT_NOT_EQUAL_INT(0, hashtable_cmp_bytes(&first, sizeof(first),
-                                                     &second,
-                                                     sizeof(second)));
+    TEST_ASSERT_NOT_EQUAL_INT(0, coll_hashtable_cmp_bytes(&first, sizeof(first),
+                                                          &second,
+                                                          sizeof(second)));
 }
 
 void test_hashtable_should_CallKeysOfDifferentSizesDifferentKeys(void)
@@ -2100,9 +2111,9 @@ void test_hashtable_should_CallKeysOfDifferentSizesDifferentKeys(void)
     const uint8_t  narrow = 0;
 
     /* even though the shorter one is a prefix of the longer one */
-    TEST_ASSERT_NOT_EQUAL_INT(0, hashtable_cmp_bytes(&wide, sizeof(wide),
-                                                     &narrow,
-                                                     sizeof(narrow)));
+    TEST_ASSERT_NOT_EQUAL_INT(
+        0,
+        coll_hashtable_cmp_bytes(&wide, sizeof(wide), &narrow, sizeof(narrow)));
 }
 
 /* -- CMP_STRING --------------------------------------------------------- */
@@ -2111,8 +2122,8 @@ void test_hashtable_should_CallAStringTheSameKeyWithOrWithoutItsTerminator(void)
 {
     const char *text = "collection";
 
-    TEST_ASSERT_EQUAL_INT(0, hashtable_cmp_string(text, strlen(text), text,
-                                                  strlen(text) + 1));
+    TEST_ASSERT_EQUAL_INT(0, coll_hashtable_cmp_string(text, strlen(text), text,
+                                                       strlen(text) + 1));
 }
 
 void test_hashtable_should_CallDifferentStringsDifferentKeys(void)
@@ -2121,10 +2132,10 @@ void test_hashtable_should_CallDifferentStringsDifferentKeys(void)
     const char *second = "collections";
 
     /* a prefix is not the string it is a prefix of */
-    TEST_ASSERT_NOT_EQUAL_INT(0, hashtable_cmp_string(first, strlen(first),
-                                                      second,
-                                                      strlen(second)));
-    TEST_ASSERT_NOT_EQUAL_INT(0, hashtable_cmp_string("abc", 3, "abd", 3));
+    TEST_ASSERT_NOT_EQUAL_INT(0, coll_hashtable_cmp_string(first, strlen(first),
+                                                           second,
+                                                           strlen(second)));
+    TEST_ASSERT_NOT_EQUAL_INT(0, coll_hashtable_cmp_string("abc", 3, "abd", 3));
 }
 
 void test_hashtable_should_StopComparingStringsAtTheSizeTheyWereGiven(void)
@@ -2133,52 +2144,52 @@ void test_hashtable_should_StopComparingStringsAtTheSizeTheyWereGiven(void)
 
     /* no read runs past the size a key was stored with, so a buffer with no
        NUL is the string it spells and nothing more */
-    TEST_ASSERT_EQUAL_INT(0, hashtable_cmp_string(unterminated,
-                                                  sizeof(unterminated), "col",
-                                                  4));
-    TEST_ASSERT_NOT_EQUAL_INT(0, hashtable_cmp_string(unterminated,
-                                                      sizeof(unterminated),
-                                                      "coll", 5));
+    TEST_ASSERT_EQUAL_INT(0, coll_hashtable_cmp_string(
+                                 unterminated, sizeof(unterminated), "col", 4));
+    TEST_ASSERT_NOT_EQUAL_INT(0, coll_hashtable_cmp_string(unterminated,
+                                                           sizeof(unterminated),
+                                                           "coll", 5));
 }
 
 /* -- STRING KEYS END TO END --------------------------------------------- */
 
-void test_hashtable_should_HoldStringKeysStoredWithOrWithoutTheirTerminator(void)
+void test_hashtable_should_HoldStringKeysStoredWithOrWithoutTheirTerminator(
+    void)
 {
     const char *key   = "answer";
     const int   value = 42;
     int         out   = 0;
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hashtable_hash_string,
-                                         hashtable_cmp_string));
+                          coll_hashtable_init(&ht, coll_hashtable_hash_string,
+                                              coll_hashtable_cmp_string));
 
     /* stored counting the terminator */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, key, strlen(key) + 1, &value,
-                                        sizeof(value)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, key, strlen(key) + 1, &value, sizeof(value)));
 
     /* found without counting it, because the hash and the comparison draw
        the line at the same place */
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, key, strlen(key), &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get(&ht, key, strlen(key), &out, sizeof(out)));
     TEST_ASSERT_EQUAL_INT(value, out);
 
     /* and it is the same key, so putting it the other way round replaces */
     const int again = 43;
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_put(&ht, key, strlen(key), &again,
-                                        sizeof(again)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_put(&ht, key, strlen(key), &again, sizeof(again)));
     TEST_ASSERT_EQUAL_size_t(1, ht.size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_get(&ht, key, strlen(key) + 1, &out,
-                                        sizeof(out)));
+    TEST_ASSERT_EQUAL_INT(
+        COLLECTION_OK,
+        coll_hashtable_get(&ht, key, strlen(key) + 1, &out, sizeof(out)));
     TEST_ASSERT_EQUAL_INT(again, out);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_HoldManyStringKeysAtOnce(void)
@@ -2188,15 +2199,15 @@ void test_hashtable_should_HoldManyStringKeysAtOnce(void)
     char key[16];
 
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                          hashtable_init(&ht, hashtable_hash_string,
-                                         hashtable_cmp_string));
+                          coll_hashtable_init(&ht, coll_hashtable_hash_string,
+                                              coll_hashtable_cmp_string));
 
     for (int i = 0; i < KEYS; i++)
     {
         snprintf(key, sizeof(key), "key%d", i);
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, key, strlen(key) + 1, &i,
-                                            sizeof(i)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, key, strlen(key) + 1, &i, sizeof(i)));
     }
 
     TEST_ASSERT_EQUAL_size_t(KEYS, ht.size);
@@ -2207,9 +2218,9 @@ void test_hashtable_should_HoldManyStringKeysAtOnce(void)
         int out = 0;
 
         snprintf(key, sizeof(key), "key%d", i);
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_get(&ht, key, strlen(key) + 1, &out,
-                                            sizeof(out)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_get(&ht, key, strlen(key) + 1, &out, sizeof(out)));
         TEST_ASSERT_EQUAL_INT(i, out);
     }
 
@@ -2218,7 +2229,7 @@ void test_hashtable_should_HoldManyStringKeysAtOnce(void)
     memset(key, 0, sizeof(key));
     TEST_ASSERT_EQUAL_size_t(KEYS, ht.size);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 /* -- MANY PAIRS --------------------------------------------------------- */
@@ -2227,7 +2238,7 @@ void test_hashtable_should_SurviveFillingAndEmptyingRepeatedly(void)
 {
     enum { KEYS = 200 };
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     for (int round = 0; round < 3; round++)
     {
@@ -2235,9 +2246,9 @@ void test_hashtable_should_SurviveFillingAndEmptyingRepeatedly(void)
         {
             const int value = i + round;
 
-            TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                                  hashtable_put(&ht, &i, sizeof(i), &value,
-                                                sizeof(value)));
+            TEST_ASSERT_EQUAL_INT(
+                COLLECTION_OK,
+                coll_hashtable_put(&ht, &i, sizeof(i), &value, sizeof(value)));
         }
 
         TEST_ASSERT_EQUAL_size_t(KEYS, ht.size);
@@ -2247,9 +2258,9 @@ void test_hashtable_should_SurviveFillingAndEmptyingRepeatedly(void)
         {
             int out = 0;
 
-            TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                                  hashtable_get(&ht, &i, sizeof(i), &out,
-                                                sizeof(out)));
+            TEST_ASSERT_EQUAL_INT(
+                COLLECTION_OK,
+                coll_hashtable_get(&ht, &i, sizeof(i), &out, sizeof(out)));
             TEST_ASSERT_EQUAL_INT(i + round, out);
         }
 
@@ -2257,12 +2268,12 @@ void test_hashtable_should_SurviveFillingAndEmptyingRepeatedly(void)
            happens on chains built in the other direction */
         for (int i = KEYS - 1; i >= 0; i--)
             TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                                  hashtable_remove(&ht, &i, sizeof(i)));
+                                  coll_hashtable_remove(&ht, &i, sizeof(i)));
 
         assert_empty(&ht);
     }
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 void test_hashtable_should_KeepEveryPairReachableWhileItResizes(void)
@@ -2271,18 +2282,17 @@ void test_hashtable_should_KeepEveryPairReachableWhileItResizes(void)
 
     struct int_pair pairs[KEYS];
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_init(&ht, NULL, NULL));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_init(&ht, NULL, NULL));
 
     for (int i = 0; i < KEYS; i++)
     {
         pairs[i].key   = i * 16; /* low bits all zero, the hard case */
         pairs[i].value = i;
 
-        TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
-                              hashtable_put(&ht, &pairs[i].key,
-                                            sizeof(pairs[i].key),
-                                            &pairs[i].value,
-                                            sizeof(pairs[i].value)));
+        TEST_ASSERT_EQUAL_INT(
+            COLLECTION_OK,
+            coll_hashtable_put(&ht, &pairs[i].key, sizeof(pairs[i].key),
+                               &pairs[i].value, sizeof(pairs[i].value)));
 
         /* after every single put, including the ones that resized */
         assert_contents(&ht, pairs, (size_t)i + 1);
@@ -2290,7 +2300,7 @@ void test_hashtable_should_KeepEveryPairReachableWhileItResizes(void)
 
     assert_walk_yields(&ht, pairs, KEYS);
 
-    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, hashtable_destroy(&ht));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, coll_hashtable_destroy(&ht));
 }
 
 #endif // TEST
