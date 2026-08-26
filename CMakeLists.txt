@@ -127,7 +127,19 @@ if(COLLECTION_BUILD_SHARED)
   collection_configure_target(collection_shared)
   set_target_properties(collection_shared PROPERTIES
     VERSION   ${PROJECT_VERSION}
-    SOVERSION ${PROJECT_VERSION_MAJOR})
+    SOVERSION ${PROJECT_VERSION_MAJOR}
+    # macOS only, and ignored elsewhere. CMake would otherwise stamp the
+    # library's own name as @rpath/libcollection.0.dylib, which is a
+    # placeholder every consumer has to resolve by passing -Wl,-rpath. A plain
+    # `cc main.c -lcollection` passes no such thing, so the program would link
+    # and then die at startup with "no LC_RPATH's found". Recording the
+    # installed location instead makes that command work the way it already
+    # does on Linux, where the SONAME sends the loader to the same place.
+    #
+    # The cost is relocation: an installed dylib that is later moved is no
+    # longer found. Installing to a different prefix is fine, since this is
+    # the prefix's own libdir and DESTDIR staging does not change it.
+    INSTALL_NAME_DIR "${CMAKE_INSTALL_FULL_LIBDIR}")
   list(APPEND COLLECTION_INSTALL_TARGETS collection_shared)
 endif()
 

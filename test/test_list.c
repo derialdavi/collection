@@ -1196,6 +1196,184 @@ void test_list_should_RejectNullPointersOnSort(void)
     TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
 }
 
+/* -- REVERSE ------------------------------------------------------------ */
+
+void test_list_should_ReverseAListIntoTheOppositeOrder(void)
+{
+    const int values[]   = { 1, 2, 3, 4 };
+    const int expected[] = { 4, 3, 2, 1 };
+
+    fill(&list, values, 4);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+
+    assert_contents(&list, expected, 4);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_ReverseAListOfTwoElements(void)
+{
+    const int values[]   = { 1, 2 };
+    const int expected[] = { 2, 1 };
+
+    /* the shortest list there is anything to do to, and the one where the
+       head and the tail are the only two nodes involved */
+    fill(&list, values, 2);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+
+    assert_contents(&list, expected, 2);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_ReverseAnOddNumberOfElements(void)
+{
+    const int values[]   = { 1, 2, 3, 4, 5 };
+    const int expected[] = { 5, 4, 3, 2, 1 };
+
+    fill(&list, values, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+
+    /* an odd count leaves one element in the middle with the same index it
+       started with, which is the case a reverse that walks in pairs gets
+       wrong */
+    assert_contents(&list, expected, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_SwapTheEndsWithoutReallocatingAnyElement(void)
+{
+    const int values[]   = { 1, 2, 3 };
+    const int expected[] = { 3, 2, 1 };
+
+    fill(&list, values, 3);
+
+    struct node *first_before = NULL;
+    struct node *last_before  = NULL;
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_get_first(&list, &first_before));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_at(&list, 2, &last_before));
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+
+    assert_contents(&list, expected, 3);
+
+    /* the nodes were relinked, not rebuilt: the very node that was at the
+       front is now at the back, still holding the element it always held */
+    TEST_ASSERT_EQUAL_PTR(last_before, list.first);
+    TEST_ASSERT_EQUAL_PTR(first_before, list.last);
+    TEST_ASSERT_EQUAL_MEMORY(&values[0], list.last->data, sizeof(values[0]));
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_ReturnToTheOriginalOrderWhenReversedTwice(void)
+{
+    const int values[] = { 10, 20, 30, 40, 50 };
+
+    fill(&list, values, 5);
+    struct snapshot before = snapshot_of(&list);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+
+    /* right back where it started, down to which node is the head and which
+       is the tail */
+    assert_unchanged(&list, before, values, 5);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_LeaveAListOfFewerThanTwoElementsAlone(void)
+{
+    const int value = 42;
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_init(&list, 0, NULL, 0));
+
+    /* an empty list is its own reverse */
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+    assert_empty(&list);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
+                          list_append(&list, &value, sizeof(value)));
+    struct snapshot before = snapshot_of(&list);
+
+    /* and so is a list of one, which must come out with its head and tail
+       still pointing at the same single node */
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+    assert_unchanged(&list, before, &value, 1);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_KeepAppendingAtTheEndAfterAReverse(void)
+{
+    const int values[]   = { 1, 2, 3 };
+    const int late       = 4;
+    const int expected[] = { 3, 2, 1, 4 };
+
+    fill(&list, values, 3);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+
+    /* a reverse that turned the chain around but left the tail pointer on the
+       old end would append into the middle of the list, or onto a node that
+       nothing links to any more */
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
+                          list_append(&list, &late, sizeof(late)));
+
+    assert_contents(&list, expected, 4);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_ReverseElementsOfDifferentSizes(void)
+{
+    const int8_t  small = 1;
+    const int32_t mid   = 2;
+    const int64_t big   = 3;
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_init(&list, 0, NULL, 0));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
+                          list_append(&list, &small, sizeof(small)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
+                          list_append(&list, &mid, sizeof(mid)));
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK,
+                          list_append(&list, &big, sizeof(big)));
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_reverse(&list));
+
+    /* reversing only relinks nodes and never looks at what they hold, so a
+       list of mixed sizes is no harder for it than any other */
+    TEST_ASSERT_EQUAL_size_t(3, list.size);
+
+    struct node *n = list.first;
+    TEST_ASSERT_EQUAL_size_t(sizeof(big), n->size);
+    TEST_ASSERT_EQUAL_MEMORY(&big, n->data, sizeof(big));
+
+    n = n->next;
+    TEST_ASSERT_EQUAL_size_t(sizeof(mid), n->size);
+    TEST_ASSERT_EQUAL_MEMORY(&mid, n->data, sizeof(mid));
+
+    n = n->next;
+    TEST_ASSERT_EQUAL_size_t(sizeof(small), n->size);
+    TEST_ASSERT_EQUAL_MEMORY(&small, n->data, sizeof(small));
+
+    TEST_ASSERT_EQUAL_PTR(list.last, n);
+    TEST_ASSERT_NULL(n->next);
+
+    TEST_ASSERT_EQUAL_INT(COLLECTION_OK, list_destroy(&list));
+}
+
+void test_list_should_RejectANullListPointerOnReverse(void)
+{
+    TEST_ASSERT_EQUAL_INT(COLLECTION_ENULL, list_reverse(NULL));
+}
+
 /* -- FIND --------------------------------------------------------------- */
 
 void test_list_should_FindTheIndexOfAMatchingElement(void)

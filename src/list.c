@@ -321,6 +321,33 @@ int list_sort(list_t *l, list_cmp_t cmp)
     return COLLECTION_OK;
 }
 
+int list_reverse(list_t *l)
+{
+    if (l == NULL) return COLLECTION_ENULL;
+    if (l->size < 2) return COLLECTION_OK;
+
+    /* walks the chain once, pointing every node at the one it came from.
+       Relinking in place like this allocates nothing, so reversing cannot
+       fail halfway and leave the list in pieces */
+    struct node *prev = NULL;
+    struct node *next = l->first;
+
+    while (next != NULL)
+    {
+        struct node *tmp = next->next;
+        next->next = prev;
+        prev = next;
+        next = tmp;
+    }
+
+    /* the two ends trade places. The old first node had its next set to NULL
+       on the very first pass, so it is already a well formed tail */
+    l->last = l->first;
+    l->first = prev;
+
+    return COLLECTION_OK;
+}
+
 int list_find(const list_t *restrict l, const void *restrict value,
               size_t elem_size, size_t *restrict index)
 {
