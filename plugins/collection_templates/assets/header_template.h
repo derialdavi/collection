@@ -1,5 +1,5 @@
-#ifndef %3$s_H
-#define %3$s_H
+#ifndef COLLECTION_%3$s_H
+#define COLLECTION_%3$s_H
 
 #include <stddef.h>
 
