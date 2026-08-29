@@ -1,6 +1,8 @@
 #ifndef %3$s_H
 #define %3$s_H
 
+#include <stddef.h>
+
 %2$s
 /**
  * @brief
